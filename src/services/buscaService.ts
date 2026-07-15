@@ -1,6 +1,6 @@
 import { LocalOuProduto, ResultadoBusca } from 'src/interfaces/buscaInterface';
 import { ProdutoCompleto } from '../interfaces/produtoCompletoInterface';
-const API_BASE = 'https://chartmenus.avatim.com.br';
+const API_BASE = 'http://localhost:32334/';
 
 export default {
     async getLocais(): Promise<LocalOuProduto[]> {

@@ -28,12 +28,15 @@ function CustomDrawerContent(props: any) {
     { name: 'calculadora', rota: '/calculadora', label: 'Calculadora', icon: 'cpu' },
     { name: 'locaisatacado', rota: '/locaisatacado', label: 'Atacado', icon: 'map-pin' },
     { name: 'reporatacado', rota: '/reporatacado', label: 'Recebimento', icon: 'upload' },
+    { name: 'balancas', rota: '/balancas', label: 'Balanças', icon: 'activity' },
   ];
 
   const rotasPermitidas = usuario?.rotasPermitidas || [];
 
+  const SEMPRE_VISIVEIS = ['home', 'balancas'];
+
   const opcoesFiltradas = opcoes.filter(
-    (item) => item.name === 'home' || rotasPermitidas.includes(item.rota)
+    (item) => SEMPRE_VISIVEIS.includes(item.name) || rotasPermitidas.includes(item.rota)
   );
 
   return (
@@ -233,6 +236,15 @@ export default function RootLayout() {
                 drawerLabel: 'Repor Atacado',
                 drawerIcon: ({ focused, size }) => (
                   <Feather name="upload" size={size} color={focused ? '#d1ccbd' : '#2F4B44'} />
+                ),
+              }}
+            />
+            <Drawer.Screen
+              name="balancas"
+              options={{
+                drawerLabel: 'Balanças',
+                drawerIcon: ({ focused, size }) => (
+                  <Feather name="activity" size={size} color={focused ? '#d1ccbd' : '#2F4B44'} />
                 ),
               }}
             />

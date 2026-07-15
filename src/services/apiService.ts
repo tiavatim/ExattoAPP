@@ -4,7 +4,7 @@ const ID_APLICACAO = 5;
 const API_KEY = '1741A9475D4E5D6707E30465978C92248E04E8BD08795A1A8D2A7CDBEF8FEFE0';
 
 const api = axios.create({
-  baseURL: 'https://chartmenus.avatim.com.br/',
+  baseURL: 'http://localhost:32334',
   headers: {
     'Content-Type': 'application/json',
   },
