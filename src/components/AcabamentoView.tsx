@@ -12,11 +12,20 @@ import { Feather } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import LinhaCard from '@/components/LinhaCard';
 import LinhaDetalheView from '@/components/LinhaDetalheView';
+import { FaixaModal } from '@/components/ConfiguracoesView';
 import ModalIniciarSessao from '@/components/ModalIniciarSessao';
 import ti400Service from '@/services/ti400Service';
-import { DashboardLinha } from '@/interfaces/ti400Interface';
+import { DashboardLinha, FaixaPeso, OpData, ProdutoItem } from '@/interfaces/ti400Interface';
 
 const POLL_MS = 3000;
+
+interface FaixaPendente {
+  lineId: string;
+  lote: number;
+  idColaborador: number;
+  produto: ProdutoItem;
+  faixa: FaixaPeso;
+}
 
 interface Props {
   onBack: () => void;
@@ -31,6 +40,7 @@ export default function AcabamentoView({ onBack }: Props) {
   const [modalLinhaId,   setModalLinhaId]   = useState<string | null>(null);
   const [modalLinhaNome, setModalLinhaNome] = useState('');
   const [modalLoading,   setModalLoading]   = useState(false);
+  const [faixaPendente,  setFaixaPendente]  = useState<FaixaPendente | null>(null);
 
   const [selectedLinha, setSelectedLinha] = useState<{ id: string; nome: string } | null>(null);
 
@@ -90,6 +100,21 @@ export default function AcabamentoView({ onBack }: Props) {
     if (!modalLinhaId) return;
     setModalLoading(true);
     try {
+      const op = await ti400Service.getOp(lote);
+      const faixa = await ti400Service.getFaixaPorProduto(op.idProduto);
+      if (!faixa) {
+        const produto = produtoFromOp(op);
+        setFaixaPendente({
+          lineId: modalLinhaId,
+          lote,
+          idColaborador,
+          produto,
+          faixa: novaFaixa(produto.idProduto),
+        });
+        setModalLinhaId(null);
+        return;
+      }
+
       await ti400Service.iniciarSessao(modalLinhaId, { lote, idColaborador });
       Toast.show({ type: 'success', text1: 'Sessão iniciada' });
       setModalLinhaId(null);
@@ -99,6 +124,22 @@ export default function AcabamentoView({ onBack }: Props) {
       Toast.show({ type: 'error', text1: 'Erro ao iniciar sessão', text2: msg });
     } finally {
       setModalLoading(false);
+    }
+  }
+
+  async function salvarFaixaPendente(faixa: FaixaPeso) {
+    if (!faixaPendente) return;
+    try {
+      await ti400Service.upsertFaixa(faixa);
+      await ti400Service.iniciarSessao(faixaPendente.lineId, {
+        lote: faixaPendente.lote,
+        idColaborador: faixaPendente.idColaborador,
+      });
+      Toast.show({ type: 'success', text1: 'Faixa cadastrada', text2: 'Sessão iniciada em seguida.' });
+      setFaixaPendente(null);
+      await carregar(true);
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: 'Erro ao salvar faixa', text2: err.response?.data?.error ?? err.message });
     }
   }
 
@@ -204,6 +245,37 @@ export default function AcabamentoView({ onBack }: Props) {
         onConfirmar={confirmarIniciar}
         onCancelar={() => setModalLinhaId(null)}
       />
+
+      {faixaPendente && (
+        <FaixaModal
+          titulo="Cadastrar Faixa da OP"
+          faixa={faixaPendente.faixa}
+          produtos={[faixaPendente.produto]}
+          produtoBloqueado
+          onSalvar={salvarFaixaPendente}
+          onCancelar={() => setFaixaPendente(null)}
+        />
+      )}
     </View>
   );
+}
+
+function produtoFromOp(op: OpData): ProdutoItem {
+  return {
+    idProduto: op.idProduto,
+    cdProduto: op.cdProduto,
+    dsProduto: op.dsProduto,
+  };
+}
+
+function novaFaixa(idProduto: number): FaixaPeso {
+  return {
+    id: 0,
+    idProduto,
+    pesoAlvo: 0,
+    verdeMin: 0,
+    verdeMax: 0,
+    amarelaMin: 0,
+    amarelaMax: 0,
+  };
 }

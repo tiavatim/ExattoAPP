@@ -199,6 +199,14 @@ export interface ProdutoItem {
   dsProduto: string;
 }
 
+export interface OpData extends ProdutoItem {
+  lote: number;
+  codigoBarra: string;
+  fabricacao: string;
+  validade: string;
+  qtdPorCaixa: number;
+}
+
 export interface ConfigAtual {
   syncPullTimes: string[];
   syncPushTimes: string[];

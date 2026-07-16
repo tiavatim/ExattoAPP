@@ -835,9 +835,11 @@ interface FaixaModalProps {
   produtos: ProdutoItem[];
   onSalvar: (f: FaixaPeso) => Promise<void>;
   onCancelar: () => void;
+  titulo?: string;
+  produtoBloqueado?: boolean;
 }
 
-function FaixaModal({ faixa, produtos, onSalvar, onCancelar }: FaixaModalProps) {
+export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, produtoBloqueado = false }: FaixaModalProps) {
   const [idProduto, setIdProduto]   = useState(faixa.idProduto);
   const [pesoAlvo, setPesoAlvo]     = useState(faixa.pesoAlvo ? String(faixa.pesoAlvo) : '');
   const [verdeMin, setVerdeMin]     = useState(faixa.verdeMin  ? String(faixa.verdeMin) : '');
@@ -846,7 +848,7 @@ function FaixaModal({ faixa, produtos, onSalvar, onCancelar }: FaixaModalProps) 
   const [amarelaMax, setAmarelaMax] = useState(faixa.amarelaMax ? String(faixa.amarelaMax) : '');
   const [saving, setSaving]         = useState(false);
   const [buscaProduto, setBuscaProduto] = useState('');
-  const [pickerAberto, setPickerAberto] = useState(idProduto === 0);
+  const [pickerAberto, setPickerAberto] = useState(idProduto === 0 && !produtoBloqueado);
 
   const produtoSelecionado = produtos.find(p => p.idProduto === idProduto);
   const produtosFiltrados  = produtos.filter(p => {
@@ -886,7 +888,7 @@ function FaixaModal({ faixa, produtos, onSalvar, onCancelar }: FaixaModalProps) 
           <View style={{ padding: 18, borderBottomWidth: 1, borderColor: '#ddd8cc',
             flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 17, color: '#163029' }}>
-              {faixa.id === 0 ? 'Nova Faixa de Peso' : 'Editar Faixa de Peso'}
+              {titulo ?? (faixa.id === 0 ? 'Nova Faixa de Peso' : 'Editar Faixa de Peso')}
             </Text>
             <Pressable onPress={onCancelar} hitSlop={8}>
               <Feather name="x" size={20} color="#6b7280" />
@@ -898,7 +900,7 @@ function FaixaModal({ faixa, produtos, onSalvar, onCancelar }: FaixaModalProps) 
             <View>
               <Text style={fLabel}>Produto</Text>
               {!pickerAberto ? (
-                <Pressable onPress={() => setPickerAberto(true)}
+                <Pressable onPress={() => { if (!produtoBloqueado) setPickerAberto(true); }}
                   style={{ ...fInput as any, flexDirection: 'row', justifyContent: 'space-between',
                     alignItems: 'center', paddingVertical: 11 }}>
                   <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 14, color: '#163029', flex: 1 }}>
@@ -906,7 +908,7 @@ function FaixaModal({ faixa, produtos, onSalvar, onCancelar }: FaixaModalProps) 
                       ? `${produtoSelecionado.cdProduto} — ${produtoSelecionado.dsProduto}`
                       : 'Selecionar produto...'}
                   </Text>
-                  <Feather name="chevron-down" size={16} color="#6b7280" />
+                  {!produtoBloqueado && <Feather name="chevron-down" size={16} color="#6b7280" />}
                 </Pressable>
               ) : (
                 <View style={{ borderWidth: 1, borderColor: '#b8b4a6', borderRadius: 8, overflow: 'hidden' }}>

@@ -10,6 +10,7 @@ import {
   LabelPrintRequest,
   LineSettings,
   LinhaCadastro,
+  OpData,
   PesagemItem,
   ProdutoItem,
   RastreabilidadeItem,
@@ -87,6 +88,11 @@ class Ti400Service {
 
   async iniciarSessao(linhaId: string, req: IniciarSessaoRequest): Promise<void> {
     await ti400Api.post(`/api/lines/${linhaId}/sessions`, req);
+  }
+
+  async getOp(lote: number): Promise<OpData> {
+    const res = await ti400Api.get<OpData>(`/api/diag/op/${lote}`);
+    return res.data;
   }
 
   async cancelarSessao(linhaId: string): Promise<void> {
@@ -210,6 +216,16 @@ class Ti400Service {
   async getFaixas(): Promise<FaixaPeso[]> {
     const res = await ti400Api.get<FaixaPeso[]>('/api/faixas');
     return res.data;
+  }
+
+  async getFaixaPorProduto(idProduto: number): Promise<FaixaPeso | null> {
+    try {
+      const res = await ti400Api.get<FaixaPeso>(`/api/faixas/produto/${idProduto}`);
+      return res.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) return null;
+      throw err;
+    }
   }
 
   async upsertFaixa(faixa: FaixaPeso): Promise<FaixaPeso> {

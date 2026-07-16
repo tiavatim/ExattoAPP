@@ -13,10 +13,14 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
+import { FaixaModal } from '@/components/ConfiguracoesView';
 import ModalIniciarSessao from '@/components/ModalIniciarSessao';
 import ti400Service from '@/services/ti400Service';
 import {
+  FaixaPeso,
+  OpData,
   PesagemItem,
+  ProdutoItem,
   RelatorioJobResponse,
   RESULTADO_COR,
   RESULTADO_LABEL,
@@ -70,6 +74,13 @@ interface Props {
   onBack: () => void;
 }
 
+interface FaixaPendente {
+  lote: number;
+  idColaborador: number;
+  produto: ProdutoItem;
+  faixa: FaixaPeso;
+}
+
 export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) {
   const [tab, setTab] = useState<Tab>('ativa');
 
@@ -80,6 +91,7 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
   const [loadingAcao, setLoadingAcao]       = useState(false);
   const [modalIniciar, setModalIniciar]     = useState(false);
   const [modalLoading, setModalLoading]     = useState(false);
+  const [faixaPendente, setFaixaPendente]   = useState<FaixaPendente | null>(null);
   const pollAtivaRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const carregarAtiva = useCallback(async (silencioso = false) => {
@@ -120,6 +132,20 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
   async function confirmarIniciar(lote: number, idColaborador: number) {
     setModalLoading(true);
     try {
+      const op = await ti400Service.getOp(lote);
+      const faixa = await ti400Service.getFaixaPorProduto(op.idProduto);
+      if (!faixa) {
+        const produto = produtoFromOp(op);
+        setFaixaPendente({
+          lote,
+          idColaborador,
+          produto,
+          faixa: novaFaixa(produto.idProduto),
+        });
+        setModalIniciar(false);
+        return;
+      }
+
       await ti400Service.iniciarSessao(linhaId, { lote, idColaborador });
       Toast.show({ type: 'success', text1: 'Sessão iniciada' });
       setModalIniciar(false);
@@ -127,6 +153,22 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
     } catch (err: any) {
       Toast.show({ type: 'error', text1: 'Erro ao iniciar sessão', text2: err.response?.data?.error ?? err.message });
     } finally { setModalLoading(false); }
+  }
+
+  async function salvarFaixaPendente(faixa: FaixaPeso) {
+    if (!faixaPendente) return;
+    try {
+      await ti400Service.upsertFaixa(faixa);
+      await ti400Service.iniciarSessao(linhaId, {
+        lote: faixaPendente.lote,
+        idColaborador: faixaPendente.idColaborador,
+      });
+      Toast.show({ type: 'success', text1: 'Faixa cadastrada', text2: 'Sessão iniciada em seguida.' });
+      setFaixaPendente(null);
+      await carregarAtiva(true);
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: 'Erro ao salvar faixa', text2: err.response?.data?.error ?? err.message });
+    }
   }
 
   async function handleCancelar() {
@@ -668,9 +710,40 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
         onCancelar={() => setModalIniciar(false)}
       />
 
+      {faixaPendente && (
+        <FaixaModal
+          titulo="Cadastrar Faixa da OP"
+          faixa={faixaPendente.faixa}
+          produtos={[faixaPendente.produto]}
+          produtoBloqueado
+          onSalvar={salvarFaixaPendente}
+          onCancelar={() => setFaixaPendente(null)}
+        />
+      )}
+
       {pesoLido && <PesoModal reading={pesoLido} onFechar={() => setPesoLido(null)} />}
     </View>
   );
+}
+
+function produtoFromOp(op: OpData): ProdutoItem {
+  return {
+    idProduto: op.idProduto,
+    cdProduto: op.cdProduto,
+    dsProduto: op.dsProduto,
+  };
+}
+
+function novaFaixa(idProduto: number): FaixaPeso {
+  return {
+    id: 0,
+    idProduto,
+    pesoAlvo: 0,
+    verdeMin: 0,
+    verdeMax: 0,
+    amarelaMin: 0,
+    amarelaMax: 0,
+  };
 }
 
 // ─── Aba Sessões ─────────────────────────────────────────────────────────────
