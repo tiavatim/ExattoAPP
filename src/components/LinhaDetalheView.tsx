@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   FlatList,
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -19,13 +20,15 @@ import {
   RelatorioJobResponse,
   RESULTADO_COR,
   RESULTADO_LABEL,
+  SessaoHistoricoItem,
   StatusSessao,
   WeighingSession,
+  WeightReading,
 } from '@/interfaces/ti400Interface';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-type Tab = 'ativa' | 'consultar';
+type Tab = 'ativa' | 'sessoes' | 'consultar';
 type Periodo = 'hoje' | '7dias' | 'mes' | 'personalizado';
 type FiltroResultado = 'todos' | 'verde' | 'amarela' | 'fora';
 
@@ -146,6 +149,19 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
     } catch (err: any) {
       Toast.show({ type: 'error', text1: 'Erro ao fazer retry', text2: err.response?.data?.error ?? err.message });
     } finally { setLoadingAcao(false); }
+  }
+
+  // ── Peso sob demanda ──────────────────────────────────────────────────────
+  const [lendoPeso, setLendoPeso] = useState(false);
+  const [pesoLido, setPesoLido]   = useState<WeightReading | null>(null);
+
+  async function lerPeso() {
+    setLendoPeso(true);
+    try {
+      setPesoLido(await ti400Service.getPeso(linhaId));
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: 'Erro ao ler peso', text2: err.response?.data?.error ?? err.message });
+    } finally { setLendoPeso(false); }
   }
 
   // ── Aba Consultar ─────────────────────────────────────────────────────────
@@ -276,13 +292,17 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
           </Text>
         </View>
         <View style={{ flexDirection: 'row', backgroundColor: '#c4bfb0', borderRadius: 8, padding: 3 }}>
-          {(['ativa', 'consultar'] as Tab[]).map((t) => (
-            <TouchableOpacity key={t} onPress={() => setTab(t)}
+          {([
+            { id: 'ativa',     label: 'Sessão Ativa' },
+            { id: 'sessoes',   label: 'Sessões' },
+            { id: 'consultar', label: 'Consultar' },
+          ] as { id: Tab; label: string }[]).map((t) => (
+            <TouchableOpacity key={t.id} onPress={() => setTab(t.id)}
               style={{ flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center',
-                backgroundColor: tab === t ? '#163029' : 'transparent' }}>
-              <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 14,
-                color: tab === t ? '#d1ccbd' : '#2F4B44' }}>
-                {t === 'ativa' ? 'Sessão Ativa' : 'Consultar'}
+                backgroundColor: tab === t.id ? '#163029' : 'transparent' }}>
+              <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 13,
+                color: tab === t.id ? '#d1ccbd' : '#2F4B44' }}>
+                {t.label}
               </Text>
             </TouchableOpacity>
           ))}
@@ -371,6 +391,14 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
                         : <><Feather name="x" size={15} color="#163029" /><Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 14, color: '#163029' }}>Cancelar</Text></>}
                     </Pressable>
                   )}
+                  <Pressable onPress={lerPeso} disabled={lendoPeso}
+                    style={{ paddingHorizontal: 16, paddingVertical: 12, borderRadius: 6,
+                      borderWidth: 1, borderColor: '#2F4B44',
+                      flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
+                    {lendoPeso
+                      ? <ActivityIndicator color="#2F4B44" size="small" />
+                      : <><Feather name="crosshair" size={15} color="#2F4B44" /><Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 14, color: '#2F4B44' }}>Ler Peso</Text></>}
+                  </Pressable>
                 </View>
 
                 {pesagensAtivas.length > 0 && (
@@ -400,6 +428,9 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
           />
         )
       )}
+
+      {/* ── Aba Sessões ── */}
+      {tab === 'sessoes' && <SessoesTab linhaId={linhaId} />}
 
       {/* ── Aba Consultar ── */}
       {tab === 'consultar' && (
@@ -530,6 +561,7 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
             <Text style={[thCell, { width: 76 }]}>HORA</Text>
             <Text style={[thCell, { width: 88 }]}>PESO</Text>
             <Text style={[thCell, { width: 76 }]}>RESULT.</Text>
+            <Text style={[thCell, { width: 34 }]} />
           </View>
 
           {/* Resumo */}
@@ -617,6 +649,9 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
                         </Text>
                       </View>
                     </View>
+                    <View style={{ width: 34, alignItems: 'flex-end' }}>
+                      <ReprintButton idPesagem={item.idPesagem} />
+                    </View>
                   </View>
                 );
               }}
@@ -632,6 +667,288 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
         onConfirmar={confirmarIniciar}
         onCancelar={() => setModalIniciar(false)}
       />
+
+      {pesoLido && <PesoModal reading={pesoLido} onFechar={() => setPesoLido(null)} />}
+    </View>
+  );
+}
+
+// ─── Aba Sessões ─────────────────────────────────────────────────────────────
+
+const TAKE_SESSOES = 20;
+
+function SessoesTab({ linhaId }: { linhaId: string }) {
+  const [sessoes, setSessoes]             = useState<SessaoHistoricoItem[]>([]);
+  const [loading, setLoading]             = useState(true);
+  const [carregandoMais, setCarregandoMais] = useState(false);
+  const [temMais, setTemMais]             = useState(false);
+  const [offset, setOffset]               = useState(0);
+  const [expandida, setExpandida]         = useState<string | null>(null);
+  const [pesagensSessao, setPesagensSessao] = useState<Record<string, PesagemItem[]>>({});
+  const [loadingPesagens, setLoadingPesagens] = useState<string | null>(null);
+
+  const carregar = useCallback(async (reset = true) => {
+    const off = reset ? 0 : offset;
+    if (reset) setLoading(true); else setCarregandoMais(true);
+    try {
+      const items = await ti400Service.getSessoesLinha(linhaId, TAKE_SESSOES, off);
+      setSessoes(prev => reset ? items : [...prev, ...items]);
+      setOffset(off + items.length);
+      setTemMais(items.length === TAKE_SESSOES);
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: 'Erro ao carregar sessões', text2: err.message });
+    } finally {
+      setLoading(false);
+      setCarregandoMais(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linhaId, offset]);
+
+  useEffect(() => { carregar(true); }, [linhaId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function alternarExpandir(sessao: SessaoHistoricoItem) {
+    if (expandida === sessao.idSessao) { setExpandida(null); return; }
+    setExpandida(sessao.idSessao);
+    if (!pesagensSessao[sessao.idSessao]) {
+      setLoadingPesagens(sessao.idSessao);
+      try {
+        const itens = await ti400Service.getPesagensSessao(sessao.idSessao);
+        setPesagensSessao(prev => ({ ...prev, [sessao.idSessao]: itens }));
+      } catch (err: any) {
+        Toast.show({ type: 'error', text1: 'Erro ao carregar pesagens', text2: err.message });
+      } finally { setLoadingPesagens(null); }
+    }
+  }
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#163029" />
+      </View>
+    );
+  }
+
+  return (
+    <FlatList
+      data={sessoes}
+      keyExtractor={item => item.idSessao}
+      contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 24 }}
+      ListEmptyComponent={() => (
+        <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+          <Feather name="layers" size={36} color="#9ca3af" />
+          <Text style={{ fontFamily: 'Sina-Nova-Regular', color: '#6b7280', marginTop: 8 }}>
+            Nenhuma sessão registrada
+          </Text>
+        </View>
+      )}
+      ListFooterComponent={() => temMais ? (
+        <Pressable onPress={() => carregar(false)} disabled={carregandoMais}
+          style={{ alignItems: 'center', paddingVertical: 14 }}>
+          {carregandoMais
+            ? <ActivityIndicator color="#163029" />
+            : <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 14, color: '#163029' }}>
+                Carregar mais
+              </Text>}
+        </Pressable>
+      ) : null}
+      renderItem={({ item }) => (
+        <SessaoCard
+          sessao={item}
+          expandida={expandida === item.idSessao}
+          pesagens={pesagensSessao[item.idSessao]}
+          loadingPesagens={loadingPesagens === item.idSessao}
+          onToggle={() => alternarExpandir(item)}
+        />
+      )}
+    />
+  );
+}
+
+function SessaoCard({ sessao, expandida, pesagens, loadingPesagens, onToggle }: {
+  sessao: SessaoHistoricoItem;
+  expandida: boolean;
+  pesagens?: PesagemItem[];
+  loadingPesagens: boolean;
+  onToggle: () => void;
+}) {
+  const statusCor = (STATUS_COR as Record<string, string>)[sessao.status] ?? '#9ca3af';
+
+  function formatDataHora(iso: string) {
+    const d = new Date(iso);
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' +
+      d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  return (
+    <View style={{ backgroundColor: '#f0ead6', borderRadius: 10,
+      borderWidth: 1, borderColor: '#ddd8cc', overflow: 'hidden' }}>
+      <Pressable onPress={onToggle} style={{ padding: 14 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 14, color: '#163029', flex: 1 }}>
+            OP {sessao.lote} · {sessao.dsProduto || sessao.cdProduto}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusCor }} />
+            <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 11, color: statusCor }}>
+              {sessao.status.toUpperCase()}
+            </Text>
+            <Feather name={expandida ? 'chevron-up' : 'chevron-down'} size={16} color="#6b7280" />
+          </View>
+        </View>
+        <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 12, color: '#2F4B44', marginBottom: 8 }}>
+          {formatDataHora(sessao.iniciada)}
+          {sessao.concluida ? ` → ${formatDataHora(sessao.concluida)}` : ' (em andamento)'}
+          {sessao.dsColaborador ? ` · ${sessao.dsColaborador}` : ` · Col. #${sessao.idColaborador}`}
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <MiniChip cor="#22c55e" valor={sessao.verde} />
+          <MiniChip cor="#f59e0b" valor={sessao.amarela} />
+          <MiniChip cor="#ef4444" valor={sessao.fora} />
+          <MiniChip cor="#6b7280" valor={sessao.total} label="total" />
+        </View>
+      </Pressable>
+
+      {expandida && (
+        <View style={{ borderTopWidth: 1, borderColor: '#ddd8cc', paddingHorizontal: 14, paddingBottom: 8 }}>
+          {loadingPesagens ? (
+            <ActivityIndicator color="#163029" style={{ paddingVertical: 16 }} />
+          ) : !pesagens || pesagens.length === 0 ? (
+            <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 12, color: '#6b7280',
+              textAlign: 'center', paddingVertical: 14 }}>
+              Nenhuma pesagem nesta sessão
+            </Text>
+          ) : (
+            pesagens.map(p => {
+              const res = p.nrResultadoComparacao ?? 0;
+              const cor = RESULTADO_COR[res];
+              return (
+                <View key={p.idPesagem} style={{ flexDirection: 'row', alignItems: 'center',
+                  paddingVertical: 8, borderBottomWidth: 1, borderColor: '#e5e0d4' }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 12, color: '#163029' }}>
+                      {p.nrRastreabilidade}
+                    </Text>
+                    <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 11, color: '#6b7280' }}>
+                      {formatHora(p.dtPesagem)}
+                    </Text>
+                  </View>
+                  <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 12, color: '#163029', marginRight: 8 }}>
+                    {p.vlPesoBruto.toFixed(3)} {p.dsUnidade}
+                  </Text>
+                  <View style={{ backgroundColor: cor + '22', paddingHorizontal: 6, paddingVertical: 3,
+                    borderRadius: 5, borderWidth: 1, borderColor: cor + '66', marginRight: 8 }}>
+                    <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 10, color: cor }}>
+                      {RESULTADO_LABEL[res]}
+                    </Text>
+                  </View>
+                  <ReprintButton idPesagem={p.idPesagem} />
+                </View>
+              );
+            })
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function MiniChip({ cor, valor, label }: { cor: string; valor: number; label?: string }) {
+  return (
+    <View style={{ backgroundColor: cor + '18', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3,
+      borderWidth: 1, borderColor: cor + '44', flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+      <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 12, color: cor }}>{valor}</Text>
+      {label ? <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 10, color: cor }}>{label}</Text> : null}
+    </View>
+  );
+}
+
+// ─── Reimpressão ─────────────────────────────────────────────────────────────
+
+function ReprintButton({ idPesagem }: { idPesagem: string }) {
+  const [imprimindo, setImprimindo] = useState(false);
+
+  async function reimprimir() {
+    if (imprimindo) return;
+    setImprimindo(true);
+    try {
+      const destino = await ti400Service.reimprimirPesagem(idPesagem);
+      Toast.show({ type: 'success', text1: 'Etiqueta reimpressa', text2: `Enviada para ${destino}` });
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: 'Erro ao reimprimir', text2: err.response?.data?.error ?? err.message });
+    } finally { setImprimindo(false); }
+  }
+
+  return (
+    <Pressable onPress={reimprimir} disabled={imprimindo} hitSlop={8}>
+      {imprimindo
+        ? <ActivityIndicator size="small" color="#2F4B44" />
+        : <Feather name="printer" size={17} color="#2F4B44" />}
+    </Pressable>
+  );
+}
+
+// ─── Modal Peso sob demanda ──────────────────────────────────────────────────
+
+function PesoModal({ reading, onFechar }: { reading: WeightReading; onFechar: () => void }) {
+  return (
+    <Modal visible transparent animationType="fade">
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 28 }}>
+        <View style={{ backgroundColor: '#f0ead6', borderRadius: 14, padding: 20 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 17, color: '#163029' }}>
+              Leitura de Peso
+            </Text>
+            <Pressable onPress={onFechar} hitSlop={8}>
+              <Feather name="x" size={20} color="#6b7280" />
+            </Pressable>
+          </View>
+
+          <View style={{ alignItems: 'center', marginBottom: 16 }}>
+            <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 42, color: '#163029' }}>
+              {reading.peso.toFixed(3)} {reading.unidade}
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4,
+                backgroundColor: reading.estavel ? '#22c55e' : '#f59e0b' }} />
+              <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 12,
+                color: reading.estavel ? '#22c55e' : '#f59e0b' }}>
+                {reading.estavel ? 'ESTÁVEL' : 'INSTÁVEL'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={{ backgroundColor: '#e8e3d8', borderRadius: 8, padding: 12, gap: 6 }}>
+            <PesoInfoRow label="Peso bruto" valor={`${reading.pesoBruto.toFixed(3)} ${reading.unidade}`} />
+            <PesoInfoRow label="Tara" valor={`${reading.tara.toFixed(3)} ${reading.unidade}`} />
+            <PesoInfoRow label="Modo display" valor={reading.liquido ? 'Líquido' : 'Bruto'} />
+            {reading.plataforma ? <PesoInfoRow label="Plataforma" valor={reading.plataforma} /> : null}
+          </View>
+
+          {reading.modoContinuo && (
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 10 }}>
+              <Feather name="alert-triangle" size={14} color="#ef4444" style={{ marginTop: 1 }} />
+              <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 12, color: '#ef4444', flex: 1 }}>
+                Terminal em transmissão contínua — a Impressão Automática não funciona nesse modo.
+              </Text>
+            </View>
+          )}
+
+          <Pressable onPress={onFechar}
+            style={{ marginTop: 16, backgroundColor: '#163029', borderRadius: 8, paddingVertical: 12,
+              alignItems: 'center' }}>
+            <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 15, color: '#d1ccbd' }}>Fechar</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function PesoInfoRow({ label, valor }: { label: string; valor: string }) {
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+      <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 13, color: '#2F4B44' }}>{label}</Text>
+      <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 13, color: '#163029' }}>{valor}</Text>
     </View>
   );
 }

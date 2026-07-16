@@ -5,14 +5,18 @@ import {
   CriarRelatorioRequest,
   DashboardLinha,
   FaixaPeso,
+  Impressora,
   IniciarSessaoRequest,
+  LabelPrintRequest,
   LineSettings,
+  LinhaCadastro,
   PesagemItem,
   ProdutoItem,
   RastreabilidadeItem,
   RelatorioJobResponse,
   SessaoHistoricoItem,
   WeighingSession,
+  WeightReading,
 } from '@/interfaces/ti400Interface';
 
 // Em dev: Security:ApiKey vazia na API → sem autenticação.
@@ -115,6 +119,82 @@ class Ti400Service {
 
   async reimprimirPesagem(idPesagem: string): Promise<string> {
     const res = await ti400Api.post<{ destination: string }>(`/api/pesagens/${idPesagem}/reprint`);
+    return res.data.destination;
+  }
+
+  // ── Cadastro de linhas ────────────────────────────────────────────────────
+
+  async getLinhasCadastro(): Promise<LinhaCadastro[]> {
+    const res = await ti400Api.get<LinhaCadastro[]>('/api/lines/cadastro');
+    return res.data;
+  }
+
+  async upsertLinha(linha: LinhaCadastro): Promise<LinhaCadastro> {
+    const res = await ti400Api.post<LinhaCadastro>('/api/lines', linha);
+    return res.data;
+  }
+
+  async desativarLinha(id: string): Promise<void> {
+    await ti400Api.delete(`/api/lines/${id}`);
+  }
+
+  // ── Impressoras ───────────────────────────────────────────────────────────
+
+  async getImpressoras(): Promise<Impressora[]> {
+    const res = await ti400Api.get<Impressora[]>('/api/impressoras');
+    return res.data;
+  }
+
+  async upsertImpressora(impressora: Impressora): Promise<Impressora> {
+    const res = await ti400Api.post<Impressora>('/api/impressoras', impressora);
+    return res.data;
+  }
+
+  async desativarImpressora(id: string): Promise<void> {
+    await ti400Api.delete(`/api/impressoras/${id}`);
+  }
+
+  // ── Peso sob demanda e impressão manual ───────────────────────────────────
+
+  async getPeso(linhaId: string): Promise<WeightReading> {
+    const res = await ti400Api.get<WeightReading>(`/api/lines/${linhaId}/weight`, {
+      timeout: 15000,
+    });
+    return res.data;
+  }
+
+  async imprimirEtiqueta(linhaId: string, label: LabelPrintRequest): Promise<void> {
+    await ti400Api.post('/api/labels/print', label, { params: { lineId: linhaId } });
+  }
+
+  async imprimirEtiquetaTeste(impressora: Impressora): Promise<string> {
+    const agora = new Date();
+    const dataBr = agora.toLocaleDateString('pt-BR');
+    const label: LabelPrintRequest = {
+      cdProduto: 'TESTE',
+      produto: 'ETIQUETA DE TESTE',
+      codigoBarra: '7891234567890',
+      lote: 1,
+      fabricacao: dataBr,
+      validade: dataBr,
+      quantidade: '1 UN',
+      data: agora.toISOString(),
+      operador: 'TESTE',
+      pesoBruto: '0.000 kg',
+      nrRastreabilidade: 'TESTE-0000000000000',
+    };
+    const res = await ti400Api.post<{ destination: string }>('/api/labels/print', label, {
+      params: {
+        linguagem: impressora.linguagem,
+        ip: impressora.ip,
+        porta: impressora.porta,
+        codePage: impressora.codePage,
+        dpi: impressora.dpi,
+        larguraMm: impressora.larguraMm,
+        alturaMm: impressora.alturaMm,
+      },
+      timeout: 15000,
+    });
     return res.data.destination;
   }
 

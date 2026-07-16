@@ -85,6 +85,7 @@ export interface SessaoHistoricoItem {
 }
 
 export interface RastreabilidadeItem {
+  idPesagem: string;
   nrRastreabilidade: string;
   dtPesagem: string;
   vlPesoBruto: number;
@@ -98,6 +99,61 @@ export interface RastreabilidadeItem {
   fabricacao: string;
   validade: string;
   linhaNome: string;
+}
+
+export interface Impressora {
+  id: string;
+  nome: string;
+  ip: string;
+  porta: number;
+  linguagem: string;
+  codePage: string;
+  dpi: number;
+  larguraMm: number;
+  alturaMm: number;
+  descricao: string | null;
+  ativa: boolean;
+}
+
+export interface LinhaCadastro {
+  id: string;
+  nome: string;
+  ip: string;
+  porta: number;
+  timeoutConnMs: number;
+  timeoutReadMs: number;
+  idImpressora: string | null;
+  impressoraNome: string | null;
+  ativa: boolean;
+}
+
+export interface WeightReading {
+  lineId: string;
+  plataforma: string | null;
+  peso: number;
+  pesoBruto: number;
+  tara: number;
+  estavel: boolean;
+  liquido: boolean;
+  dentroFaixa: boolean;
+  zeroCapturado: boolean;
+  unidade: string;
+  modoContinuo: boolean;
+  resultado: number;
+}
+
+export interface LabelPrintRequest {
+  cdProduto: string;
+  produto: string;
+  codigoBarra: string;
+  lote: number;
+  fabricacao: string;
+  validade: string;
+  quantidade: string;
+  data: string;
+  operador: string;
+  pesoBruto: string;
+  nrRastreabilidade: string;
 }
 
 // 0=Unknown 1=Verde 2=AmarelaInferior 3=AmarelaSuperior 4=ForaInferior 5=ForaSuperior

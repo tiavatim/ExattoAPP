@@ -57,6 +57,7 @@ export default function RastreabilidadeView({ onBack }: Props) {
   const [loading, setLoading] = useState(false);
   const [item, setItem]       = useState<RastreabilidadeItem | null>(null);
   const [naoEncontrado, setNaoEncontrado] = useState(false);
+  const [reimprimindo, setReimprimindo]   = useState(false);
 
   async function buscar() {
     const nr = codigo.trim();
@@ -79,10 +80,16 @@ export default function RastreabilidadeView({ onBack }: Props) {
   }
 
   async function reimprimir() {
-    if (!item) return;
-    // Abre o endpoint de reimpressão via código de rastreabilidade não está disponível diretamente;
-    // precisaríamos do idPesagem. Por ora, informa o usuário.
-    Toast.show({ type: 'info', text1: 'Reimpressão', text2: 'Use o painel de pesagens da sessão para reimprimir.' });
+    if (!item || reimprimindo) return;
+    setReimprimindo(true);
+    try {
+      const destino = await ti400Service.reimprimirPesagem(item.idPesagem);
+      Toast.show({ type: 'success', text1: 'Etiqueta reimpressa', text2: `Enviada para ${destino}` });
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: 'Erro ao reimprimir', text2: err.response?.data?.error ?? err.message });
+    } finally {
+      setReimprimindo(false);
+    }
   }
 
   return (
@@ -189,6 +196,18 @@ export default function RastreabilidadeView({ onBack }: Props) {
                 </Text>
               </View>
             </View>
+
+            <Pressable onPress={reimprimir} disabled={reimprimindo}
+              style={{ marginTop: 12, backgroundColor: reimprimindo ? '#9ca3af' : '#163029',
+                borderRadius: 10, paddingVertical: 13,
+                flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+              {reimprimindo
+                ? <ActivityIndicator color="#d1ccbd" size="small" />
+                : <Feather name="printer" size={17} color="#d1ccbd" />}
+              <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 15, color: '#d1ccbd' }}>
+                {reimprimindo ? 'Reimprimindo...' : 'Reimprimir Etiqueta'}
+              </Text>
+            </Pressable>
           </View>
         )}
       </View>

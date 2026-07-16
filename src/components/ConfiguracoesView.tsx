@@ -21,12 +21,16 @@ import {
   ConfigAtual,
   ConfigEntry,
   FaixaPeso,
+  Impressora,
+  LinhaCadastro,
   ProdutoItem,
 } from '@/interfaces/ti400Interface';
 
 // ─── Tipos locais ─────────────────────────────────────────────────────────────
 
-type ConfigTab = 'faixas' | 'geral';
+type ConfigTab = 'linhas' | 'impressoras' | 'faixas' | 'geral';
+
+const GUID_VAZIO = '00000000-0000-0000-0000-000000000000';
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
@@ -35,7 +39,7 @@ interface Props {
 }
 
 export default function ConfiguracoesView({ onBack }: Props) {
-  const [tab, setTab] = useState<ConfigTab>('faixas');
+  const [tab, setTab] = useState<ConfigTab>('linhas');
 
   return (
     <View style={{ flex: 1 }}>
@@ -52,13 +56,15 @@ export default function ConfiguracoesView({ onBack }: Props) {
 
         <View style={{ flexDirection: 'row', backgroundColor: '#c4bfb0', borderRadius: 8, padding: 3 }}>
           {([
-            { id: 'faixas', label: 'Faixas de Peso' },
-            { id: 'geral',  label: 'Geral' },
+            { id: 'linhas',      label: 'Linhas' },
+            { id: 'impressoras', label: 'Impressoras' },
+            { id: 'faixas',      label: 'Faixas' },
+            { id: 'geral',       label: 'Geral' },
           ] as { id: ConfigTab; label: string }[]).map((t) => (
             <TouchableOpacity key={t.id} onPress={() => setTab(t.id)}
               style={{ flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center',
                 backgroundColor: tab === t.id ? '#163029' : 'transparent' }}>
-              <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 13,
+              <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 12,
                 color: tab === t.id ? '#d1ccbd' : '#2F4B44' }}>
                 {t.label}
               </Text>
@@ -67,9 +73,626 @@ export default function ConfiguracoesView({ onBack }: Props) {
         </View>
       </View>
 
-      {tab === 'faixas' && <FaixasTab />}
-      {tab === 'geral'  && <GeralTab />}
+      {tab === 'linhas'      && <LinhasTab />}
+      {tab === 'impressoras' && <ImpressorasTab />}
+      {tab === 'faixas'      && <FaixasTab />}
+      {tab === 'geral'       && <GeralTab />}
     </View>
+  );
+}
+
+// ─── Aba Linhas ───────────────────────────────────────────────────────────────
+
+function LinhasTab() {
+  const [linhas, setLinhas]           = useState<LinhaCadastro[]>([]);
+  const [impressoras, setImpressoras] = useState<Impressora[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [modalLinha, setModalLinha]   = useState<LinhaCadastro | null>(null);
+
+  const carregar = useCallback(async () => {
+    try {
+      const [l, i] = await Promise.all([
+        ti400Service.getLinhasCadastro(),
+        ti400Service.getImpressoras(),
+      ]);
+      setLinhas(l);
+      setImpressoras(i);
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: 'Erro ao carregar linhas', text2: err.message });
+    } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  function confirmarDesativar(linha: LinhaCadastro) {
+    Alert.alert(
+      'Desativar linha',
+      `Desativar a linha "${linha.nome}"? Ela deixará de aparecer no painel e não aceitará novas sessões.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Desativar', style: 'destructive', onPress: async () => {
+          try {
+            await ti400Service.desativarLinha(linha.id);
+            setLinhas(prev => prev.map(l => l.id === linha.id ? { ...l, ativa: false } : l));
+            Toast.show({ type: 'success', text1: 'Linha desativada' });
+          } catch (err: any) {
+            Toast.show({ type: 'error', text1: 'Erro ao desativar', text2: err.response?.data?.error ?? err.message });
+          }
+        }},
+      ],
+    );
+  }
+
+  async function salvarLinha(linha: LinhaCadastro) {
+    try {
+      const salva = await ti400Service.upsertLinha(linha);
+      setLinhas(prev => {
+        const idx = prev.findIndex(l => l.id === salva.id);
+        return idx >= 0 ? prev.map((l, i) => i === idx ? salva : l) : [...prev, salva];
+      });
+      setModalLinha(null);
+      Toast.show({ type: 'success', text1: linha.id === GUID_VAZIO ? 'Linha criada' : 'Linha atualizada' });
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: 'Erro ao salvar', text2: err.response?.data?.error ?? err.message });
+    }
+  }
+
+  if (loading) return <CenterLoader />;
+
+  return (
+    <>
+      <FlatList
+        data={linhas}
+        keyExtractor={item => item.id}
+        contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 90 }}
+        ListEmptyComponent={() => (
+          <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+            <Feather name="activity" size={36} color="#9ca3af" />
+            <Text style={{ fontFamily: 'Sina-Nova-Regular', color: '#6b7280', marginTop: 8 }}>
+              Nenhuma linha cadastrada
+            </Text>
+          </View>
+        )}
+        renderItem={({ item }) => (
+          <View style={{ backgroundColor: '#f0ead6', borderRadius: 10, padding: 14,
+            borderWidth: 1, borderColor: '#ddd8cc', opacity: item.ativa ? 1 : 0.55 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 14, color: '#163029' }}>
+                  {item.nome}
+                </Text>
+                {!item.ativa && <StatusBadge label="Inativa" cor="#ef4444" />}
+              </View>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <Pressable onPress={() => setModalLinha(item)} hitSlop={8}>
+                  <Feather name="edit-2" size={17} color="#2F4B44" />
+                </Pressable>
+                {item.ativa && (
+                  <Pressable onPress={() => confirmarDesativar(item)} hitSlop={8}>
+                    <Feather name="slash" size={17} color="#ef4444" />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+            <InfoLinha icone="wifi" texto={`${item.ip}:${item.porta}`} />
+            <InfoLinha icone="printer" texto={item.impressoraNome ?? 'Sem impressora vinculada'} />
+            <InfoLinha icone="clock" texto={`Timeouts: conexão ${item.timeoutConnMs} ms · leitura ${item.timeoutReadMs} ms`} />
+          </View>
+        )}
+      />
+
+      <View style={{ position: 'absolute', bottom: 20, right: 20 }}>
+        <Pressable
+          onPress={() => setModalLinha({ id: GUID_VAZIO, nome: '', ip: '', porta: 9000,
+            timeoutConnMs: 3000, timeoutReadMs: 5000, idImpressora: null, impressoraNome: null, ativa: true })}
+          style={{ backgroundColor: '#163029', width: 52, height: 52, borderRadius: 26,
+            justifyContent: 'center', alignItems: 'center', elevation: 4 }}>
+          <Feather name="plus" size={24} color="#d1ccbd" />
+        </Pressable>
+      </View>
+
+      {modalLinha && (
+        <LinhaModal
+          linha={modalLinha}
+          impressoras={impressoras.filter(i => i.ativa || i.id === modalLinha.idImpressora)}
+          onSalvar={salvarLinha}
+          onCancelar={() => setModalLinha(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function StatusBadge({ label, cor }: { label: string; cor: string }) {
+  return (
+    <View style={{ backgroundColor: cor + '18', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2,
+      borderWidth: 1, borderColor: cor + '44' }}>
+      <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 10, color: cor }}>{label}</Text>
+    </View>
+  );
+}
+
+function InfoLinha({ icone, texto }: { icone: any; texto: string }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+      <Feather name={icone} size={12} color="#6b7280" />
+      <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 12, color: '#2F4B44' }}>{texto}</Text>
+    </View>
+  );
+}
+
+// ─── Modal Linha ─────────────────────────────────────────────────────────────
+
+interface LinhaModalProps {
+  linha: LinhaCadastro;
+  impressoras: Impressora[];
+  onSalvar: (l: LinhaCadastro) => Promise<void>;
+  onCancelar: () => void;
+}
+
+function LinhaModal({ linha, impressoras, onSalvar, onCancelar }: LinhaModalProps) {
+  const [nome, setNome]                   = useState(linha.nome);
+  const [ip, setIp]                       = useState(linha.ip);
+  const [porta, setPorta]                 = useState(String(linha.porta));
+  const [timeoutConn, setTimeoutConn]     = useState(String(linha.timeoutConnMs));
+  const [timeoutRead, setTimeoutRead]     = useState(String(linha.timeoutReadMs));
+  const [idImpressora, setIdImpressora]   = useState<string | null>(linha.idImpressora);
+  const [ativa, setAtiva]                 = useState(linha.ativa);
+  const [saving, setSaving]               = useState(false);
+  const [pickerAberto, setPickerAberto]   = useState(false);
+
+  const impressoraSelecionada = impressoras.find(i => i.id === idImpressora);
+
+  function validar(): string | null {
+    if (!nome.trim()) return 'Nome é obrigatório.';
+    if (!ip.trim()) return 'IP é obrigatório.';
+    const p = parseInt(porta, 10);
+    if (isNaN(p) || p < 1 || p > 65535) return 'Porta deve estar entre 1 e 65535.';
+    const tc = parseInt(timeoutConn, 10), tr = parseInt(timeoutRead, 10);
+    if (isNaN(tc) || tc <= 0 || isNaN(tr) || tr <= 0) return 'Timeouts devem ser maiores que zero.';
+    return null;
+  }
+
+  async function salvar() {
+    const erro = validar();
+    if (erro) { Toast.show({ type: 'error', text1: erro }); return; }
+    setSaving(true);
+    await onSalvar({
+      id: linha.id, nome: nome.trim(), ip: ip.trim(),
+      porta: parseInt(porta, 10),
+      timeoutConnMs: parseInt(timeoutConn, 10),
+      timeoutReadMs: parseInt(timeoutRead, 10),
+      idImpressora, impressoraNome: null, ativa,
+    });
+    setSaving(false);
+  }
+
+  return (
+    <Modal visible transparent animationType="fade">
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 20 }}>
+        <View style={{ backgroundColor: '#f0ead6', borderRadius: 14, maxHeight: '90%', overflow: 'hidden' }}>
+          <View style={{ padding: 18, borderBottomWidth: 1, borderColor: '#ddd8cc',
+            flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 17, color: '#163029' }}>
+              {linha.id === GUID_VAZIO ? 'Nova Linha' : 'Editar Linha'}
+            </Text>
+            <Pressable onPress={onCancelar} hitSlop={8}>
+              <Feather name="x" size={20} color="#6b7280" />
+            </Pressable>
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: 18, gap: 14 }} keyboardShouldPersistTaps="handled">
+            <View>
+              <Text style={fLabel}>Nome</Text>
+              <TextInput value={nome} onChangeText={setNome}
+                placeholder="Ex: Linha 01" placeholderTextColor="#9ca3af" style={fInput} />
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 2 }}>
+                <Text style={fLabel}>IP do terminal</Text>
+                <TextInput value={ip} onChangeText={setIp}
+                  placeholder="Ex: 192.168.0.50" placeholderTextColor="#9ca3af"
+                  keyboardType="numbers-and-punctuation" autoCapitalize="none" style={fInput} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={fLabel}>Porta</Text>
+                <TextInput value={porta} onChangeText={setPorta}
+                  keyboardType="numeric" style={fInput} />
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={fLabel}>Timeout conexão (ms)</Text>
+                <TextInput value={timeoutConn} onChangeText={setTimeoutConn}
+                  keyboardType="numeric" style={fInput} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={fLabel}>Timeout leitura (ms)</Text>
+                <TextInput value={timeoutRead} onChangeText={setTimeoutRead}
+                  keyboardType="numeric" style={fInput} />
+              </View>
+            </View>
+
+            <View>
+              <Text style={fLabel}>Impressora</Text>
+              {!pickerAberto ? (
+                <Pressable onPress={() => setPickerAberto(true)}
+                  style={{ ...fInput as any, flexDirection: 'row', justifyContent: 'space-between',
+                    alignItems: 'center', paddingVertical: 11 }}>
+                  <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 14, color: '#163029', flex: 1 }}>
+                    {impressoraSelecionada ? impressoraSelecionada.nome : 'Sem impressora'}
+                  </Text>
+                  <Feather name="chevron-down" size={16} color="#6b7280" />
+                </Pressable>
+              ) : (
+                <View style={{ borderWidth: 1, borderColor: '#b8b4a6', borderRadius: 8, overflow: 'hidden' }}>
+                  <ScrollView style={{ maxHeight: 160 }} nestedScrollEnabled keyboardShouldPersistTaps="always">
+                    <Pressable onPress={() => { setIdImpressora(null); setPickerAberto(false); }}
+                      style={({ pressed }) => ({
+                        paddingVertical: 10, paddingHorizontal: 12,
+                        backgroundColor: pressed ? '#e0dbd0' : (idImpressora === null ? '#d1ccbd' : '#f0ead6'),
+                        borderBottomWidth: 1, borderColor: '#e0dbd0',
+                      })}>
+                      <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 13, color: '#6b7280' }}>
+                        Sem impressora
+                      </Text>
+                    </Pressable>
+                    {impressoras.map(i => (
+                      <Pressable key={i.id} onPress={() => { setIdImpressora(i.id); setPickerAberto(false); }}
+                        style={({ pressed }) => ({
+                          paddingVertical: 10, paddingHorizontal: 12,
+                          backgroundColor: pressed ? '#e0dbd0' : (i.id === idImpressora ? '#d1ccbd' : '#f0ead6'),
+                          borderBottomWidth: 1, borderColor: '#e0dbd0',
+                        })}>
+                        <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 13, color: '#163029' }}>
+                          {i.nome}
+                        </Text>
+                        <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 12, color: '#2F4B44' }}>
+                          {i.ip}:{i.porta} · {i.linguagem}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={fLabel}>Linha ativa</Text>
+              <Switch value={ativa} onValueChange={setAtiva}
+                trackColor={{ false: '#9ca3af', true: '#163029' }} thumbColor="#fff" />
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Pressable onPress={onCancelar} disabled={saving}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 8,
+                  borderWidth: 1, borderColor: '#163029', alignItems: 'center' }}>
+                <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 15, color: '#163029' }}>Cancelar</Text>
+              </Pressable>
+              <Pressable onPress={salvar} disabled={saving}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 8,
+                  backgroundColor: saving ? '#9ca3af' : '#163029',
+                  flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
+                {saving
+                  ? <ActivityIndicator color="#d1ccbd" size="small" />
+                  : <Feather name="check" size={16} color="#d1ccbd" />}
+                <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 15, color: '#d1ccbd' }}>
+                  {saving ? 'Salvando...' : 'Salvar'}
+                </Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ─── Aba Impressoras ──────────────────────────────────────────────────────────
+
+const LINGUAGENS = ['PPLB', 'PPLA', 'ZPL', 'EPL', 'TSPL'];
+
+function ImpressorasTab() {
+  const [impressoras, setImpressoras] = useState<Impressora[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [modalImp, setModalImp]       = useState<Impressora | null>(null);
+  const [testandoId, setTestandoId]   = useState<string | null>(null);
+
+  const carregar = useCallback(async () => {
+    try {
+      setImpressoras(await ti400Service.getImpressoras());
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: 'Erro ao carregar impressoras', text2: err.message });
+    } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  function confirmarDesativar(imp: Impressora) {
+    Alert.alert(
+      'Desativar impressora',
+      `Desativar a impressora "${imp.nome}"?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Desativar', style: 'destructive', onPress: async () => {
+          try {
+            await ti400Service.desativarImpressora(imp.id);
+            setImpressoras(prev => prev.map(i => i.id === imp.id ? { ...i, ativa: false } : i));
+            Toast.show({ type: 'success', text1: 'Impressora desativada' });
+          } catch (err: any) {
+            Toast.show({ type: 'error', text1: 'Erro ao desativar', text2: err.response?.data?.error ?? err.message });
+          }
+        }},
+      ],
+    );
+  }
+
+  async function testarImpressao(imp: Impressora) {
+    if (testandoId) return;
+    setTestandoId(imp.id);
+    try {
+      const destino = await ti400Service.imprimirEtiquetaTeste(imp);
+      Toast.show({ type: 'success', text1: 'Etiqueta de teste enviada', text2: `Enviada para ${destino}` });
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: 'Erro no teste de impressão', text2: err.response?.data?.error ?? err.message });
+    } finally {
+      setTestandoId(null);
+    }
+  }
+
+  async function salvarImpressora(imp: Impressora) {
+    try {
+      const salva = await ti400Service.upsertImpressora(imp);
+      setImpressoras(prev => {
+        const idx = prev.findIndex(i => i.id === salva.id);
+        return idx >= 0 ? prev.map((i, x) => x === idx ? salva : i) : [...prev, salva];
+      });
+      setModalImp(null);
+      Toast.show({ type: 'success', text1: imp.id === GUID_VAZIO ? 'Impressora criada' : 'Impressora atualizada' });
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: 'Erro ao salvar', text2: err.response?.data?.error ?? err.message });
+    }
+  }
+
+  if (loading) return <CenterLoader />;
+
+  return (
+    <>
+      <FlatList
+        data={impressoras}
+        keyExtractor={item => item.id}
+        contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 90 }}
+        ListEmptyComponent={() => (
+          <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+            <Feather name="printer" size={36} color="#9ca3af" />
+            <Text style={{ fontFamily: 'Sina-Nova-Regular', color: '#6b7280', marginTop: 8 }}>
+              Nenhuma impressora cadastrada
+            </Text>
+          </View>
+        )}
+        renderItem={({ item }) => (
+          <View style={{ backgroundColor: '#f0ead6', borderRadius: 10, padding: 14,
+            borderWidth: 1, borderColor: '#ddd8cc', opacity: item.ativa ? 1 : 0.55 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 14, color: '#163029' }}>
+                  {item.nome}
+                </Text>
+                {!item.ativa && <StatusBadge label="Inativa" cor="#ef4444" />}
+              </View>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {item.ativa && (
+                  <Pressable onPress={() => testarImpressao(item)} hitSlop={8} disabled={testandoId !== null}>
+                    {testandoId === item.id
+                      ? <ActivityIndicator size="small" color="#2F4B44" />
+                      : <Feather name="printer" size={17} color="#2F4B44" />}
+                  </Pressable>
+                )}
+                <Pressable onPress={() => setModalImp(item)} hitSlop={8}>
+                  <Feather name="edit-2" size={17} color="#2F4B44" />
+                </Pressable>
+                {item.ativa && (
+                  <Pressable onPress={() => confirmarDesativar(item)} hitSlop={8}>
+                    <Feather name="slash" size={17} color="#ef4444" />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+            <InfoLinha icone="wifi" texto={`${item.ip}:${item.porta}`} />
+            <InfoLinha icone="code" texto={`${item.linguagem} · ${item.codePage} · ${item.dpi} dpi`} />
+            <InfoLinha icone="maximize-2" texto={`Etiqueta ${item.larguraMm} × ${item.alturaMm} mm`} />
+            {item.descricao ? <InfoLinha icone="info" texto={item.descricao} /> : null}
+          </View>
+        )}
+      />
+
+      <View style={{ position: 'absolute', bottom: 20, right: 20 }}>
+        <Pressable
+          onPress={() => setModalImp({ id: GUID_VAZIO, nome: '', ip: '', porta: 9100,
+            linguagem: 'PPLB', codePage: 'WINDOWS-1252', dpi: 203,
+            larguraMm: 101.6, alturaMm: 127, descricao: null, ativa: true })}
+          style={{ backgroundColor: '#163029', width: 52, height: 52, borderRadius: 26,
+            justifyContent: 'center', alignItems: 'center', elevation: 4 }}>
+          <Feather name="plus" size={24} color="#d1ccbd" />
+        </Pressable>
+      </View>
+
+      {modalImp && (
+        <ImpressoraModal
+          impressora={modalImp}
+          onSalvar={salvarImpressora}
+          onCancelar={() => setModalImp(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// ─── Modal Impressora ────────────────────────────────────────────────────────
+
+interface ImpressoraModalProps {
+  impressora: Impressora;
+  onSalvar: (i: Impressora) => Promise<void>;
+  onCancelar: () => void;
+}
+
+function ImpressoraModal({ impressora, onSalvar, onCancelar }: ImpressoraModalProps) {
+  const [nome, setNome]           = useState(impressora.nome);
+  const [ip, setIp]               = useState(impressora.ip);
+  const [porta, setPorta]         = useState(String(impressora.porta));
+  const [linguagem, setLinguagem] = useState(impressora.linguagem);
+  const [codePage, setCodePage]   = useState(impressora.codePage);
+  const [dpi, setDpi]             = useState(String(impressora.dpi));
+  const [larguraMm, setLarguraMm] = useState(String(impressora.larguraMm));
+  const [alturaMm, setAlturaMm]   = useState(String(impressora.alturaMm));
+  const [descricao, setDescricao] = useState(impressora.descricao ?? '');
+  const [ativa, setAtiva]         = useState(impressora.ativa);
+  const [saving, setSaving]       = useState(false);
+
+  function validar(): string | null {
+    if (!nome.trim()) return 'Nome é obrigatório.';
+    if (!ip.trim()) return 'IP é obrigatório.';
+    const p = parseInt(porta, 10);
+    if (isNaN(p) || p < 1 || p > 65535) return 'Porta deve estar entre 1 e 65535.';
+    if (!codePage.trim()) return 'CodePage é obrigatório.';
+    const d = parseInt(dpi, 10);
+    if (isNaN(d) || d <= 0) return 'DPI deve ser maior que zero.';
+    const n = (s: string) => parseFloat(s.replace(',', '.'));
+    if ([n(larguraMm), n(alturaMm)].some(v => isNaN(v) || v <= 0))
+      return 'Largura e altura devem ser maiores que zero.';
+    return null;
+  }
+
+  async function salvar() {
+    const erro = validar();
+    if (erro) { Toast.show({ type: 'error', text1: erro }); return; }
+    setSaving(true);
+    const n = (s: string) => parseFloat(s.replace(',', '.'));
+    await onSalvar({
+      id: impressora.id, nome: nome.trim(), ip: ip.trim(),
+      porta: parseInt(porta, 10), linguagem, codePage: codePage.trim().toUpperCase(),
+      dpi: parseInt(dpi, 10), larguraMm: n(larguraMm), alturaMm: n(alturaMm),
+      descricao: descricao.trim() || null, ativa,
+    });
+    setSaving(false);
+  }
+
+  return (
+    <Modal visible transparent animationType="fade">
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 20 }}>
+        <View style={{ backgroundColor: '#f0ead6', borderRadius: 14, maxHeight: '90%', overflow: 'hidden' }}>
+          <View style={{ padding: 18, borderBottomWidth: 1, borderColor: '#ddd8cc',
+            flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 17, color: '#163029' }}>
+              {impressora.id === GUID_VAZIO ? 'Nova Impressora' : 'Editar Impressora'}
+            </Text>
+            <Pressable onPress={onCancelar} hitSlop={8}>
+              <Feather name="x" size={20} color="#6b7280" />
+            </Pressable>
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: 18, gap: 14 }} keyboardShouldPersistTaps="handled">
+            <View>
+              <Text style={fLabel}>Nome</Text>
+              <TextInput value={nome} onChangeText={setNome}
+                placeholder="Ex: Argox Linha 01" placeholderTextColor="#9ca3af" style={fInput} />
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 2 }}>
+                <Text style={fLabel}>IP</Text>
+                <TextInput value={ip} onChangeText={setIp}
+                  placeholder="Ex: 192.168.0.60" placeholderTextColor="#9ca3af"
+                  keyboardType="numbers-and-punctuation" autoCapitalize="none" style={fInput} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={fLabel}>Porta</Text>
+                <TextInput value={porta} onChangeText={setPorta}
+                  keyboardType="numeric" style={fInput} />
+              </View>
+            </View>
+
+            <View>
+              <Text style={fLabel}>Linguagem</Text>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {LINGUAGENS.map(l => (
+                  <TouchableOpacity key={l} onPress={() => setLinguagem(l)}
+                    style={{ flex: 1, paddingVertical: 9, borderRadius: 8, alignItems: 'center',
+                      backgroundColor: linguagem === l ? '#163029' : '#d1ccbd',
+                      borderWidth: 1, borderColor: linguagem === l ? '#163029' : '#b8b4a6' }}>
+                    <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 11,
+                      color: linguagem === l ? '#d1ccbd' : '#163029' }}>
+                      {l}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 2 }}>
+                <Text style={fLabel}>CodePage</Text>
+                <TextInput value={codePage} onChangeText={setCodePage}
+                  autoCapitalize="characters" style={fInput} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={fLabel}>DPI</Text>
+                <TextInput value={dpi} onChangeText={setDpi}
+                  keyboardType="numeric" style={fInput} />
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={fLabel}>Largura (mm)</Text>
+                <TextInput value={larguraMm} onChangeText={setLarguraMm}
+                  keyboardType="decimal-pad" style={fInput} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={fLabel}>Altura (mm)</Text>
+                <TextInput value={alturaMm} onChangeText={setAlturaMm}
+                  keyboardType="decimal-pad" style={fInput} />
+              </View>
+            </View>
+
+            <View>
+              <Text style={fLabel}>Descrição (opcional)</Text>
+              <TextInput value={descricao} onChangeText={setDescricao}
+                placeholder="Ex: Impressora da expedição" placeholderTextColor="#9ca3af" style={fInput} />
+            </View>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={fLabel}>Impressora ativa</Text>
+              <Switch value={ativa} onValueChange={setAtiva}
+                trackColor={{ false: '#9ca3af', true: '#163029' }} thumbColor="#fff" />
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Pressable onPress={onCancelar} disabled={saving}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 8,
+                  borderWidth: 1, borderColor: '#163029', alignItems: 'center' }}>
+                <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 15, color: '#163029' }}>Cancelar</Text>
+              </Pressable>
+              <Pressable onPress={salvar} disabled={saving}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 8,
+                  backgroundColor: saving ? '#9ca3af' : '#163029',
+                  flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
+                {saving
+                  ? <ActivityIndicator color="#d1ccbd" size="small" />
+                  : <Feather name="check" size={16} color="#d1ccbd" />}
+                <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 15, color: '#d1ccbd' }}>
+                  {saving ? 'Salvando...' : 'Salvar'}
+                </Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
