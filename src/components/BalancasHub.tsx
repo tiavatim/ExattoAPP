@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
-export type BalancasView = 'hub' | 'acabamento' | 'relatorios' | 'rastreabilidade' | 'configuracoes';
+export type BalancasView = 'hub' | 'acabamento' | 'relatorios' | 'rastreabilidade' | 'faixas' | 'configuracoes';
 
 interface Card {
   id: BalancasView;
@@ -29,6 +29,12 @@ const CARDS: Card[] = [
     label: 'Rastreabilidade',
     descricao: 'Consulte qualquer caixa pelo código impresso na etiqueta',
     icon: 'search',
+  },
+  {
+    id: 'faixas',
+    label: 'Faixas',
+    descricao: 'Cadastro de faixas de peso por produto',
+    icon: 'sliders',
   },
   {
     id: 'configuracoes',

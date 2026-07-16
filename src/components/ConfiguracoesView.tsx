@@ -698,7 +698,7 @@ function ImpressoraModal({ impressora, onSalvar, onCancelar }: ImpressoraModalPr
 
 // ─── Aba Faixas de Peso ───────────────────────────────────────────────────────
 
-function FaixasTab() {
+export function FaixasTab() {
   const [faixas, setFaixas]     = useState<FaixaPeso[]>([]);
   const [produtos, setProdutos] = useState<ProdutoItem[]>([]);
   const [loading, setLoading]   = useState(true);

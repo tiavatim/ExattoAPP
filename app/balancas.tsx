@@ -6,6 +6,7 @@ import BalancasHub, { BalancasView } from '@/components/BalancasHub';
 import AcabamentoView from '@/components/AcabamentoView';
 import RelatoriosView from '@/components/RelatoriosView';
 import RastreabilidadeView from '@/components/RastreabilidadeView';
+import FaixasView from '@/components/FaixasView';
 import ConfiguracoesView from '@/components/ConfiguracoesView';
 
 export default function BalancasScreen() {
@@ -32,6 +33,7 @@ export default function BalancasScreen() {
         {view === 'acabamento'      && <AcabamentoView       onBack={() => setView('hub')} />}
         {view === 'relatorios'      && <RelatoriosView       onBack={() => setView('hub')} />}
         {view === 'rastreabilidade' && <RastreabilidadeView  onBack={() => setView('hub')} />}
+        {view === 'faixas'          && <FaixasView           onBack={() => setView('hub')} />}
         {view === 'configuracoes'   && <ConfiguracoesView    onBack={() => setView('hub')} />}
       </View>
     </DrawerSceneWrapper>
