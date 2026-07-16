@@ -7,7 +7,6 @@ export interface DashboardSessao {
   iniciada: string;
   tentativasErro: number;
   ultimoErro: string | null;
-  idTurno: number | null;
 }
 
 export interface DashboardLinha {
@@ -53,7 +52,6 @@ export interface WeighingSession {
   iniciada: string;
   concluida: string | null;
   idSessaoDB: string | null;
-  idTurno: number | null;
 }
 
 export interface PesagemItem {
@@ -68,7 +66,6 @@ export interface PesagemItem {
   idOperador: number | null;
   dsOperador: string | null;
   lote: number;
-  idTurno: number | null;
 }
 
 export interface SessaoHistoricoItem {
@@ -138,13 +135,6 @@ export interface RelatorioJobResponse {
   dtConcluido: string | null;
   downloadUrl: string | null;
   erro: string | null;
-}
-
-export interface Turno {
-  id: number;
-  nome: string;
-  inicio: string;
-  fim: string;
 }
 
 export interface ProdutoItem {

@@ -20,7 +20,6 @@ import {
   RESULTADO_COR,
   RESULTADO_LABEL,
   StatusSessao,
-  Turno,
   WeighingSession,
 } from '@/interfaces/ti400Interface';
 
@@ -150,12 +149,10 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
   }
 
   // ── Aba Consultar ─────────────────────────────────────────────────────────
-  const [turnos, setTurnos]                   = useState<Turno[]>([]);
   const [periodo, setPeriodo]                 = useState<Periodo>('hoje');
   const [dataDe, setDataDe]                   = useState(hoje());
   const [dataAte, setDataAte]                 = useState(hoje());
   const [opFilter, setOpFilter]               = useState('');
-  const [turnoFilter, setTurnoFilter]         = useState<number | null>(null);
   const [filtroResultado, setFiltroResultado] = useState<FiltroResultado>('todos');
   const [busca, setBusca]                     = useState('');
 
@@ -171,7 +168,6 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
   const exportPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    ti400Service.getTurnos().then(setTurnos).catch(() => {});
     return () => { if (exportPollRef.current) clearInterval(exportPollRef.current); };
   }, []);
 
@@ -199,7 +195,7 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
 
     try {
       const items = await ti400Service.getPesagensLinha(
-        linhaId, TAKE, off, from, to, loteNum, turnoFilter ?? undefined,
+        linhaId, TAKE, off, from, to, loteNum,
       );
       setPesagens(prev => reset ? items : [...prev, ...items]);
       const novoOffset = off + items.length;
@@ -450,38 +446,13 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
               </View>
             </View>
 
-            {/* OP e Turno */}
+            {/* OP / Lote */}
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
               <View style={{ width: 100 }}>
                 <Text style={fLabel}>OP / Lote</Text>
                 <TextInput value={opFilter} onChangeText={setOpFilter}
                   placeholder="Ex: 42" placeholderTextColor="#9ca3af" keyboardType="numeric" style={fInput} />
               </View>
-              {turnos.length > 0 && (
-                <View style={{ flex: 1 }}>
-                  <Text style={fLabel}>Turno</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                    <TouchableOpacity onPress={() => setTurnoFilter(null)}
-                      style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6,
-                        backgroundColor: turnoFilter === null ? '#163029' : '#d1ccbd',
-                        borderWidth: 1, borderColor: turnoFilter === null ? '#163029' : '#b8b4a6' }}>
-                      <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 12,
-                        color: turnoFilter === null ? '#d1ccbd' : '#163029' }}>Todos</Text>
-                    </TouchableOpacity>
-                    {turnos.map(t => (
-                      <TouchableOpacity key={t.id} onPress={() => setTurnoFilter(t.id)}
-                        style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6,
-                          backgroundColor: turnoFilter === t.id ? '#163029' : '#d1ccbd',
-                          borderWidth: 1, borderColor: turnoFilter === t.id ? '#163029' : '#b8b4a6' }}>
-                        <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 12,
-                          color: turnoFilter === t.id ? '#d1ccbd' : '#163029' }}>
-                          {t.nome}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
             </View>
 
             {/* Resultado */}

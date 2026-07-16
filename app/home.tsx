@@ -31,7 +31,8 @@ export default function Home() {
     { titulo: ' Locais', descricao: 'Lista de impressao de locais.', rota: '/locais', icone: 'map-pin' },
     { titulo: ' Recebimento', descricao: 'Recebimento de produtos no  Atacado.', rota: '/reporatacado', icone: 'map-pin' },
     { titulo: ' Locais Atacado', descricao: 'Lista de impressao de locais Atacado.', rota: '/locaisatacado', icone: 'map-pin' },
-   
+    { titulo: ' Balanças', descricao: 'Pesagem e etiquetagem das linhas TI400.', rota: '/balancas', icone: 'activity' },
+
   ] as const;
 
   useEffect(() => {

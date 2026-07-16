@@ -12,7 +12,6 @@ import {
   RastreabilidadeItem,
   RelatorioJobResponse,
   SessaoHistoricoItem,
-  Turno,
   WeighingSession,
 } from '@/interfaces/ti400Interface';
 
@@ -57,10 +56,9 @@ class Ti400Service {
     from?: string,
     to?: string,
     lote?: number,
-    turnoId?: number,
   ): Promise<PesagemItem[]> {
     const res = await ti400Api.get<PesagemItem[]>(`/api/lines/${linhaId}/pesagens`, {
-      params: { take, offset, from, to, lote, turnoId },
+      params: { take, offset, from, to, lote },
     });
     return res.data;
   }
@@ -115,11 +113,6 @@ class Ti400Service {
     return res.data;
   }
 
-  async getTurnos(): Promise<Turno[]> {
-    const res = await ti400Api.get<Turno[]>('/api/turnos');
-    return res.data;
-  }
-
   async reimprimirPesagem(idPesagem: string): Promise<string> {
     const res = await ti400Api.post<{ destination: string }>(`/api/pesagens/${idPesagem}/reprint`);
     return res.data.destination;
@@ -158,17 +151,6 @@ class Ti400Service {
   async updateConfig(entries: ConfigEntry[]): Promise<ConfigAtual> {
     const res = await ti400Api.patch<ConfigAtual>('/api/config', entries);
     return res.data;
-  }
-
-  // ── Turnos ────────────────────────────────────────────────────────────────
-
-  async upsertTurno(turno: { id?: number; nome: string; inicio: string; fim: string }): Promise<Turno> {
-    const res = await ti400Api.post<Turno>('/api/turnos', { id: turno.id ?? 0, ...turno });
-    return res.data;
-  }
-
-  async deleteTurno(id: number): Promise<void> {
-    await ti400Api.delete(`/api/turnos/${id}`);
   }
 
   // ── Sync manual ───────────────────────────────────────────────────────────

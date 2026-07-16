@@ -22,12 +22,11 @@ import {
   ConfigEntry,
   FaixaPeso,
   ProdutoItem,
-  Turno,
 } from '@/interfaces/ti400Interface';
 
 // ─── Tipos locais ─────────────────────────────────────────────────────────────
 
-type ConfigTab = 'faixas' | 'geral' | 'turnos';
+type ConfigTab = 'faixas' | 'geral';
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
@@ -55,7 +54,6 @@ export default function ConfiguracoesView({ onBack }: Props) {
           {([
             { id: 'faixas', label: 'Faixas de Peso' },
             { id: 'geral',  label: 'Geral' },
-            { id: 'turnos', label: 'Turnos' },
           ] as { id: ConfigTab; label: string }[]).map((t) => (
             <TouchableOpacity key={t.id} onPress={() => setTab(t.id)}
               style={{ flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center',
@@ -71,7 +69,6 @@ export default function ConfiguracoesView({ onBack }: Props) {
 
       {tab === 'faixas' && <FaixasTab />}
       {tab === 'geral'  && <GeralTab />}
-      {tab === 'turnos' && <TurnosTab />}
     </View>
   );
 }
@@ -735,204 +732,6 @@ function ConfigInfoRow({ label, valor }: { label: string; valor: string }) {
       <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 11, color: '#2F4B44', width: 36 }}>{label}:</Text>
       <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 11, color: '#163029', flex: 1 }}>{valor}</Text>
     </View>
-  );
-}
-
-// ─── Aba Turnos ───────────────────────────────────────────────────────────────
-
-function TurnosTab() {
-  const [turnos, setTurnos]     = useState<Turno[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [modalTurno, setModalTurno] = useState<Partial<Turno> | null>(null);
-
-  const carregar = useCallback(async () => {
-    try {
-      setTurnos(await ti400Service.getTurnos());
-    } catch (err: any) {
-      Toast.show({ type: 'error', text1: 'Erro ao carregar turnos', text2: err.message });
-    } finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { carregar(); }, [carregar]);
-
-  function confirmarDelete(turno: Turno) {
-    Alert.alert(
-      'Remover turno',
-      `Remover o turno "${turno.nome}"?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Remover', style: 'destructive', onPress: async () => {
-          try {
-            await ti400Service.deleteTurno(turno.id);
-            setTurnos(prev => prev.filter(t => t.id !== turno.id));
-            Toast.show({ type: 'success', text1: 'Turno removido' });
-          } catch (err: any) {
-            Toast.show({ type: 'error', text1: 'Erro ao remover', text2: err.message });
-          }
-        }},
-      ],
-    );
-  }
-
-  async function salvarTurno(dados: { id?: number; nome: string; inicio: string; fim: string }) {
-    try {
-      const salvo = await ti400Service.upsertTurno(dados);
-      setTurnos(prev => {
-        const idx = prev.findIndex(t => t.id === salvo.id);
-        const sorted = idx >= 0
-          ? prev.map((t, i) => i === idx ? salvo : t)
-          : [...prev, salvo];
-        return sorted.sort((a, b) => a.inicio.localeCompare(b.inicio));
-      });
-      setModalTurno(null);
-      Toast.show({ type: 'success', text1: dados.id ? 'Turno atualizado' : 'Turno criado' });
-    } catch (err: any) {
-      Toast.show({ type: 'error', text1: 'Erro ao salvar', text2: err.response?.data?.error ?? err.message });
-    }
-  }
-
-  if (loading) return <CenterLoader />;
-
-  return (
-    <>
-      <FlatList
-        data={turnos}
-        keyExtractor={item => String(item.id)}
-        contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 90 }}
-        ListEmptyComponent={() => (
-          <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-            <Feather name="clock" size={36} color="#9ca3af" />
-            <Text style={{ fontFamily: 'Sina-Nova-Regular', color: '#6b7280', marginTop: 8 }}>
-              Nenhum turno cadastrado
-            </Text>
-          </View>
-        )}
-        renderItem={({ item }) => (
-          <View style={{ backgroundColor: '#f0ead6', borderRadius: 10, padding: 14,
-            borderWidth: 1, borderColor: '#ddd8cc',
-            flexDirection: 'row', alignItems: 'center' }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 15, color: '#163029' }}>
-                {item.nome}
-              </Text>
-              <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 13, color: '#2F4B44', marginTop: 2 }}>
-                {item.inicio} → {item.fim}
-                {item.inicio > item.fim ? ' (vira meia-noite)' : ''}
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row', gap: 14 }}>
-              <Pressable onPress={() => setModalTurno(item)} hitSlop={8}>
-                <Feather name="edit-2" size={18} color="#2F4B44" />
-              </Pressable>
-              <Pressable onPress={() => confirmarDelete(item)} hitSlop={8}>
-                <Feather name="trash-2" size={18} color="#ef4444" />
-              </Pressable>
-            </View>
-          </View>
-        )}
-      />
-
-      <View style={{ position: 'absolute', bottom: 20, right: 20 }}>
-        <Pressable
-          onPress={() => setModalTurno({ id: 0, nome: '', inicio: '00:00', fim: '00:00' })}
-          style={{ backgroundColor: '#163029', width: 52, height: 52, borderRadius: 26,
-            justifyContent: 'center', alignItems: 'center', elevation: 4 }}>
-          <Feather name="plus" size={24} color="#d1ccbd" />
-        </Pressable>
-      </View>
-
-      {modalTurno !== null && (
-        <TurnoModal
-          turno={modalTurno}
-          onSalvar={salvarTurno}
-          onCancelar={() => setModalTurno(null)}
-        />
-      )}
-    </>
-  );
-}
-
-// ─── Modal Turno ─────────────────────────────────────────────────────────────
-
-function TurnoModal({
-  turno,
-  onSalvar,
-  onCancelar,
-}: {
-  turno: Partial<Turno>;
-  onSalvar: (dados: { id?: number; nome: string; inicio: string; fim: string }) => Promise<void>;
-  onCancelar: () => void;
-}) {
-  const [nome, setNome]     = useState(turno.nome   ?? '');
-  const [inicio, setInicio] = useState(turno.inicio ?? '00:00');
-  const [fim, setFim]       = useState(turno.fim     ?? '00:00');
-  const [saving, setSaving] = useState(false);
-
-  const hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
-
-  async function salvar() {
-    if (!nome.trim()) { Toast.show({ type: 'error', text1: 'Nome é obrigatório' }); return; }
-    if (!hhmm.test(inicio)) { Toast.show({ type: 'error', text1: 'Início inválido', text2: 'Use HH:mm' }); return; }
-    if (!hhmm.test(fim))    { Toast.show({ type: 'error', text1: 'Fim inválido',    text2: 'Use HH:mm' }); return; }
-    setSaving(true);
-    await onSalvar({ id: turno.id || undefined, nome: nome.trim(), inicio, fim });
-    setSaving(false);
-  }
-
-  return (
-    <Modal visible transparent animationType="fade">
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 24 }}>
-        <View style={{ backgroundColor: '#f0ead6', borderRadius: 14, padding: 20 }}>
-          <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 17, color: '#163029', marginBottom: 18 }}>
-            {turno.id ? 'Editar Turno' : 'Novo Turno'}
-          </Text>
-
-          <Text style={fLabel}>Nome</Text>
-          <TextInput value={nome} onChangeText={setNome}
-            placeholder="Ex: Turno A" placeholderTextColor="#9ca3af"
-            style={[fInput, { marginBottom: 14 }]} autoFocus />
-
-          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 6 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={fLabel}>Início (HH:mm)</Text>
-              <TextInput value={inicio} onChangeText={setInicio}
-                placeholder="06:00" placeholderTextColor="#9ca3af"
-                keyboardType="numeric" style={fInput} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={fLabel}>Fim (HH:mm)</Text>
-              <TextInput value={fim} onChangeText={setFim}
-                placeholder="14:00" placeholderTextColor="#9ca3af"
-                keyboardType="numeric" style={fInput} />
-            </View>
-          </View>
-          <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 11, color: '#9ca3af',
-            marginBottom: 20, fontStyle: 'italic' }}>
-            Fim menor que início = turno que cruza meia-noite
-          </Text>
-
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <Pressable onPress={onCancelar} disabled={saving}
-              style={{ flex: 1, paddingVertical: 12, borderRadius: 8,
-                borderWidth: 1, borderColor: '#163029', alignItems: 'center' }}>
-              <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 15, color: '#163029' }}>Cancelar</Text>
-            </Pressable>
-            <Pressable onPress={salvar} disabled={saving}
-              style={{ flex: 1, paddingVertical: 12, borderRadius: 8,
-                backgroundColor: saving ? '#9ca3af' : '#163029',
-                flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
-              {saving
-                ? <ActivityIndicator color="#d1ccbd" size="small" />
-                : <Feather name="check" size={16} color="#d1ccbd" />}
-              <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 15, color: '#d1ccbd' }}>
-                {saving ? 'Salvando...' : 'Salvar'}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
   );
 }
 
