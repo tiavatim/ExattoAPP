@@ -752,6 +752,7 @@ export function FaixasTab() {
       });
       setModalFaixa(null);
       Toast.show({ type: 'success', text1: faixa.id === 0 ? 'Faixa criada' : 'Faixa atualizada' });
+      try { setProdutos(await ti400Service.getProdutos()); } catch { /* chip atualiza no próximo load */ }
     } catch (err: any) {
       Toast.show({ type: 'error', text1: 'Erro ao salvar', text2: err.response?.data?.error ?? err.message });
     }
@@ -773,55 +774,69 @@ export function FaixasTab() {
             </Text>
           </View>
         )}
-        renderItem={({ item }) => (
-          <View style={{ backgroundColor: '#f0ead6', borderRadius: 10, padding: 14,
-            borderWidth: 1, borderColor: '#ddd8cc' }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-              <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 14, color: '#163029', flex: 1 }}>
-                {nomeProduto(item.idProduto)}
-              </Text>
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <Pressable onPress={() => setModalFaixa(item)} hitSlop={8}>
-                  <Feather name="edit-2" size={17} color="#2F4B44" />
-                </Pressable>
-                <Pressable onPress={() => confirmarDelete(item)} hitSlop={8}>
-                  <Feather name="trash-2" size={17} color="#ef4444" />
-                </Pressable>
+        renderItem={({ item }) => {
+          const produto = produtos.find(p => p.idProduto === item.idProduto);
+          const qtdOp = produto?.qtdPorCaixaOp ?? 0;
+          return (
+            <View style={{ backgroundColor: '#f0ead6', borderRadius: 10, padding: 14,
+              borderWidth: 1, borderColor: '#ddd8cc' }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 14, color: '#163029', flex: 1 }}>
+                  {nomeProduto(item.idProduto)}
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <Pressable onPress={() => setModalFaixa(item)} hitSlop={8}>
+                    <Feather name="edit-2" size={17} color="#2F4B44" />
+                  </Pressable>
+                  <Pressable onPress={() => confirmarDelete(item)} hitSlop={8}>
+                    <Feather name="trash-2" size={17} color="#ef4444" />
+                  </Pressable>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                <PesoChip label="Alvo"   valor={item.pesoAlvo}   cor="#163029" />
+                <PesoChip
+                  label="Verde ↓"
+                  valor={item.verdeMin}
+                  cor={COR_TEXTO_FAIXA_AMARELA}
+                  fundoCor={COR_FAIXA_VERDE + '22'}
+                  bordaCor={COR_FAIXA_VERDE + '66'}
+                />
+                <PesoChip
+                  label="Verde ↑"
+                  valor={item.verdeMax}
+                  cor={COR_TEXTO_FAIXA_AMARELA}
+                  fundoCor={COR_FAIXA_VERDE + '22'}
+                  bordaCor={COR_FAIXA_VERDE + '66'}
+                />
+                <PesoChip
+                  label="Amar. ↓"
+                  valor={item.amarelaMin}
+                  cor={COR_TEXTO_FAIXA_AMARELA}
+                  fundoCor={COR_FUNDO_FAIXA_AMARELA}
+                  bordaCor={COR_BORDA_FAIXA_AMARELA}
+                />
+                <PesoChip
+                  label="Amar. ↑"
+                  valor={item.amarelaMax}
+                  cor={COR_TEXTO_FAIXA_AMARELA}
+                  fundoCor={COR_FUNDO_FAIXA_AMARELA}
+                  bordaCor={COR_BORDA_FAIXA_AMARELA}
+                />
+                <View style={{ backgroundColor: '#2F4B4418', borderRadius: 6,
+                  paddingHorizontal: 8, paddingVertical: 4,
+                  borderWidth: 1, borderColor: '#2F4B4444' }}>
+                  <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 10, color: '#2F4B44' }}>
+                    Itens/caixa
+                  </Text>
+                  <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 13, color: '#2F4B44' }}>
+                    {qtdOp > 0 ? `${qtdOp} un` : '—'}
+                  </Text>
+                </View>
               </View>
             </View>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              <PesoChip label="Alvo"   valor={item.pesoAlvo}   cor="#163029" />
-              <PesoChip
-                label="Verde ↓"
-                valor={item.verdeMin}
-                cor={COR_TEXTO_FAIXA_AMARELA}
-                fundoCor={COR_FAIXA_VERDE + '22'}
-                bordaCor={COR_FAIXA_VERDE + '66'}
-              />
-              <PesoChip
-                label="Verde ↑"
-                valor={item.verdeMax}
-                cor={COR_TEXTO_FAIXA_AMARELA}
-                fundoCor={COR_FAIXA_VERDE + '22'}
-                bordaCor={COR_FAIXA_VERDE + '66'}
-              />
-              <PesoChip
-                label="Amar. ↓"
-                valor={item.amarelaMin}
-                cor={COR_TEXTO_FAIXA_AMARELA}
-                fundoCor={COR_FUNDO_FAIXA_AMARELA}
-                bordaCor={COR_BORDA_FAIXA_AMARELA}
-              />
-              <PesoChip
-                label="Amar. ↑"
-                valor={item.amarelaMax}
-                cor={COR_TEXTO_FAIXA_AMARELA}
-                fundoCor={COR_FUNDO_FAIXA_AMARELA}
-                bordaCor={COR_BORDA_FAIXA_AMARELA}
-              />
-            </View>
-          </View>
-        )}
+          );
+        }}
       />
 
       <View style={{ position: 'absolute', bottom: 20, right: 20 }}>
@@ -870,15 +885,18 @@ interface FaixaModalProps {
   onCancelar: () => void;
   titulo?: string;
   produtoBloqueado?: boolean;
+  qtdObrigatoria?: boolean;
 }
 
-export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, produtoBloqueado = false }: FaixaModalProps) {
+export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, produtoBloqueado = false, qtdObrigatoria = false }: FaixaModalProps) {
+  const produtoInicial = produtos.find(p => p.idProduto === faixa.idProduto);
   const [idProduto, setIdProduto]   = useState(faixa.idProduto);
   const [pesoAlvo, setPesoAlvo]     = useState(faixa.pesoAlvo ? String(faixa.pesoAlvo) : '');
   const [verdeMin, setVerdeMin]     = useState(faixa.verdeMin  ? String(faixa.verdeMin) : '');
   const [verdeMax, setVerdeMax]     = useState(faixa.verdeMax  ? String(faixa.verdeMax) : '');
   const [amarelaMin, setAmarelaMin] = useState(faixa.amarelaMin ? String(faixa.amarelaMin) : '');
   const [amarelaMax, setAmarelaMax] = useState(faixa.amarelaMax ? String(faixa.amarelaMax) : '');
+  const [qtdCaixa, setQtdCaixa]     = useState(produtoInicial?.qtdPorCaixaOp ? String(produtoInicial.qtdPorCaixaOp) : '');
   const [saving, setSaving]         = useState(false);
   const [buscaProduto, setBuscaProduto] = useState('');
   const [pickerAberto, setPickerAberto] = useState(idProduto === 0 && !produtoBloqueado);
@@ -898,6 +916,10 @@ export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, prod
     if (aMin > vMin) return 'Amarela Mín deve ser ≤ Verde Mín.';
     if (vMin > vMax) return 'Verde Mín deve ser ≤ Verde Máx.';
     if (vMax > aMax) return 'Verde Máx deve ser ≤ Amarela Máx.';
+    if (qtdObrigatoria && !qtdCaixa.trim())
+      return 'Informe os itens por caixa do produto.';
+    if (qtdCaixa.trim() && (!/^\d+$/.test(qtdCaixa.trim()) || parseInt(qtdCaixa, 10) <= 0))
+      return 'Itens por caixa deve ser um número inteiro maior que zero.';
     return null;
   }
 
@@ -905,6 +927,20 @@ export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, prod
     const erro = validar();
     if (erro) { Toast.show({ type: 'error', text1: erro }); return; }
     setSaving(true);
+
+    const qtdNova = qtdCaixa.trim() ? parseInt(qtdCaixa, 10) : null;
+    if (qtdNova != null && produtoSelecionado && qtdNova !== produtoSelecionado.qtdPorCaixaOp) {
+      try {
+        await ti400Service.updateQtdPorCaixa(
+          produtoSelecionado.cdProduto, produtoSelecionado.dsProduto, qtdNova);
+      } catch (err: any) {
+        Toast.show({ type: 'error', text1: 'Erro ao atualizar itens por caixa',
+          text2: err.response?.data?.error ?? err.message });
+        setSaving(false);
+        return;
+      }
+    }
+
     const n = (s: string) => parseFloat(s.replace(',', '.'));
     await onSalvar({ id: faixa.id, idProduto, pesoAlvo: n(pesoAlvo),
       verdeMin: n(verdeMin), verdeMax: n(verdeMax),
@@ -962,6 +998,7 @@ export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, prod
                     ) : produtosFiltrados.map(p => (
                       <Pressable key={p.idProduto} onPress={() => {
                           setIdProduto(p.idProduto);
+                          setQtdCaixa(p.qtdPorCaixaOp ? String(p.qtdPorCaixaOp) : '');
                           setPickerAberto(false);
                           setBuscaProduto('');
                         }}
@@ -983,13 +1020,27 @@ export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, prod
               )}
             </View>
 
-            {/* Peso Alvo */}
-            <View>
-              <Text style={fLabel}>Peso Alvo (kg)</Text>
-              <TextInput value={pesoAlvo} onChangeText={setPesoAlvo}
-                placeholder="Ex: 0.500" placeholderTextColor="#9ca3af"
-                keyboardType="decimal-pad" style={fInput} />
+            {/* Peso Alvo + Itens por caixa */}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={fLabel}>Peso Alvo (kg)</Text>
+                <TextInput value={pesoAlvo} onChangeText={setPesoAlvo}
+                  placeholder="Ex: 0.500" placeholderTextColor="#9ca3af"
+                  keyboardType="decimal-pad" style={fInput} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={fLabel}>Itens por caixa</Text>
+                <TextInput value={qtdCaixa}
+                  onChangeText={t => setQtdCaixa(t.replace(/[^0-9]/g, ''))}
+                  placeholder="Ex: 12"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="number-pad" style={fInput} />
+              </View>
             </View>
+            <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 11, color: '#6b7280',
+              fontStyle: 'italic', marginTop: -8 }}>
+              Alterar itens por caixa atualiza o cadastro do produto e vale para as próximas sessões.
+            </Text>
 
             {/* Faixa Verde */}
             <View>

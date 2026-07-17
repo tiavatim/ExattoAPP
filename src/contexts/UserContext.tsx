@@ -7,6 +7,7 @@ interface UserContextType {
   usuario: UsuarioInterfaceProps | null;
   setUsuario: (user: UsuarioInterfaceProps | null) => void;
   logout: () => Promise<void>;
+  temAcesso: (path: string) => boolean;
 }
 
 export const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -58,8 +59,11 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     router.replace('/');
   };
 
+  const temAcesso = (path: string) =>
+    usuario?.rotasPermitidas?.some((rota) => rota.trim().toLowerCase() === path.toLowerCase()) ?? false;
+
   return (
-    <UserContext.Provider value={{ usuario, setUsuario, logout }}>
+    <UserContext.Provider value={{ usuario, setUsuario, logout, temAcesso }}>
       {children}
     </UserContext.Provider>
   );

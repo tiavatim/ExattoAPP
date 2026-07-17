@@ -16,7 +16,7 @@ export default function FaixasView({ onBack }: Props) {
             <Feather name="arrow-left" size={22} color="#163029" />
           </Pressable>
           <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 20, color: '#163029' }}>
-            Faixas
+            Produtos
           </Text>
         </View>
       </View>

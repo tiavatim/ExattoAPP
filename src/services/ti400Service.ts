@@ -18,6 +18,7 @@ import {
   SessaoHistoricoItem,
   WeighingSession,
   WeightReading,
+  OperadorItem,
 } from '@/interfaces/ti400Interface';
 
 // Em dev: Security:ApiKey vazia na API → sem autenticação.
@@ -34,6 +35,10 @@ const ti400Api = axios.create({
 });
 
 class Ti400Service {
+  async getOperadores(): Promise<OperadorItem[]> {
+    const res = await ti400Api.get<OperadorItem[]>('/api/operadores');
+    return res.data;
+  }
   async getDashboard(): Promise<DashboardLinha[]> {
     const res = await ti400Api.get<DashboardLinha[]>('/api/dashboard');
     return res.data;
@@ -209,6 +214,10 @@ class Ti400Service {
   async getProdutos(): Promise<ProdutoItem[]> {
     const res = await ti400Api.get<ProdutoItem[]>('/api/produtos');
     return res.data;
+  }
+
+  async updateQtdPorCaixa(cdProduto: string, dsProduto: string, qtdePorCaixa: number): Promise<void> {
+    await ti400Api.put('/api/produtos/qtd-caixa', { cdProduto, dsProduto, qtdePorCaixa });
   }
 
   // ── Faixas de Peso ────────────────────────────────────────────────────────

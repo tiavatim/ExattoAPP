@@ -4,6 +4,7 @@ export interface UsuarioInterfaceProps {
   dsSetor: string;
   noDiretoria: string;
   rotasPermitidas?: string[];
+  loginTimestamp?: number;
 }
 
 export default UsuarioInterfaceProps;

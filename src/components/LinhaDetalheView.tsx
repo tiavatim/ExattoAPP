@@ -17,6 +17,7 @@ import { FaixaModal } from '@/components/ConfiguracoesView';
 import ModalIniciarSessao from '@/components/ModalIniciarSessao';
 import { RastreabilidadeDetalheCard } from '@/components/RastreabilidadeView';
 import ti400Service from '@/services/ti400Service';
+import { useUser } from '@/contexts/UserContext';
 import {
   FaixaPeso,
   OpData,
@@ -131,6 +132,8 @@ interface FaixaPendente {
 }
 
 export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) {
+  const { usuario, temAcesso } = useUser();
+  const podeAtribuirOperador = temAcesso('/balancas/sessao/atribuir-operador');
   const [tab, setTab] = useState<Tab>('ativa');
 
   // ── Aba Ativa ─────────────────────────────────────────────────────────────
@@ -179,23 +182,25 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
   }, [pesagensAtivas]);
 
   async function confirmarIniciar(lote: number, idColaborador: number) {
+    const operador = podeAtribuirOperador ? idColaborador : usuario?.id;
+    if (!operador) return;
     setModalLoading(true);
     try {
       const op = await ti400Service.getOp(lote);
       const faixa = await ti400Service.getFaixaPorProduto(op.idProduto);
-      if (!faixa) {
+      if (!faixa || op.qtdPorCaixa <= 0) {
         const produto = produtoFromOp(op);
         setFaixaPendente({
           lote,
-          idColaborador,
+          idColaborador: operador,
           produto,
-          faixa: novaFaixa(produto.idProduto),
+          faixa: faixa ?? novaFaixa(produto.idProduto),
         });
         setModalIniciar(false);
         return;
       }
 
-      await ti400Service.iniciarSessao(linhaId, { lote, idColaborador });
+      await ti400Service.iniciarSessao(linhaId, { lote, idColaborador: operador });
       Toast.show({ type: 'success', text1: 'Sessão iniciada' });
       setModalIniciar(false);
       await carregarAtiva(true);
@@ -884,16 +889,19 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
         visible={modalIniciar}
         linhaNome={linhaNome}
         loading={modalLoading}
+        usuario={usuario!}
+        podeAtribuirOperador={podeAtribuirOperador}
         onConfirmar={confirmarIniciar}
         onCancelar={() => setModalIniciar(false)}
       />
 
       {faixaPendente && (
         <FaixaModal
-          titulo="Cadastrar Faixa da OP"
+          titulo={faixaPendente.faixa.id === 0 ? 'Cadastrar Faixa da OP' : 'Itens por Caixa da OP'}
           faixa={faixaPendente.faixa}
           produtos={[faixaPendente.produto]}
           produtoBloqueado
+          qtdObrigatoria
           onSalvar={salvarFaixaPendente}
           onCancelar={() => setFaixaPendente(null)}
         />
@@ -907,6 +915,7 @@ function produtoFromOp(op: OpData): ProdutoItem {
     idProduto: op.idProduto,
     cdProduto: op.cdProduto,
     dsProduto: op.dsProduto,
+    qtdPorCaixaOp: op.qtdPorCaixa,
   };
 }
 

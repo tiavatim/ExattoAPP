@@ -10,25 +10,39 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { UsuarioInterfaceProps } from '@/interfaces/usuarioInterface';
+import { OperadorItem } from '@/interfaces/ti400Interface';
+import ti400Service from '@/services/ti400Service';
 
 interface Props {
   visible: boolean;
   linhaNome: string;
   loading: boolean;
+  usuario: UsuarioInterfaceProps;
+  podeAtribuirOperador: boolean;
   onConfirmar: (lote: number, idColaborador: number) => void;
   onCancelar: () => void;
 }
 
-export default function ModalIniciarSessao({ visible, linhaNome, loading, onConfirmar, onCancelar }: Props) {
+export default function ModalIniciarSessao({ visible, linhaNome, loading, usuario, podeAtribuirOperador, onConfirmar, onCancelar }: Props) {
   const [lote, setLote] = useState('');
   const [colaborador, setColaborador] = useState('');
+  const [operadores, setOperadores] = useState<OperadorItem[]>([]);
+  const [operadorNome, setOperadorNome] = useState('');
+  const [abrirOperadores, setAbrirOperadores] = useState(false);
+  const operadorPadrao = String(usuario.id);
 
   useEffect(() => {
     if (!visible) {
       setLote('');
       setColaborador('');
+    } else if (!podeAtribuirOperador) {
+      setColaborador(operadorPadrao);
+      setOperadorNome(usuario.dsPessoa);
+    } else {
+      ti400Service.getOperadores().then(setOperadores).catch(() => setOperadores([]));
     }
-  }, [visible]);
+  }, [visible, podeAtribuirOperador, operadorPadrao, usuario.dsPessoa]);
 
   const loteNum  = parseInt(lote, 10);
   const colNum   = parseInt(colaborador, 10);
@@ -70,15 +84,36 @@ export default function ModalIniciarSessao({ visible, linhaNome, loading, onConf
           />
 
           <Text style={[label, { marginTop: 14 }]}>Matrícula do Colaborador</Text>
+          {podeAtribuirOperador ? (
+            <>
+              <Pressable onPress={() => setAbrirOperadores((v) => !v)} disabled={loading} style={[input, { flexDirection: 'row', justifyContent: 'space-between' }]}>
+                <Text style={{ color: operadorNome ? '#163029' : '#9ca3af', fontFamily: 'Sina-Nova-Regular' }}>
+                  {operadorNome || 'Selecione um operador'}
+                </Text>
+                <Feather name={abrirOperadores ? 'chevron-up' : 'chevron-down'} size={18} color="#163029" />
+              </Pressable>
+              {abrirOperadores && (
+                <View style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, maxHeight: 150 }}>
+                  {operadores.map((item) => (
+                    <Pressable key={item.id} onPress={() => { setColaborador(String(item.id)); setOperadorNome(item.nome); setAbrirOperadores(false); }} style={{ padding: 11, borderBottomWidth: 1, borderBottomColor: '#eee' }}>
+                      <Text style={{ color: '#163029', fontFamily: 'Sina-Nova-Regular' }}>{item.nome}</Text>
+                    </Pressable>
+                  ))}
+                  {operadores.length === 0 && <Text style={{ padding: 11, color: '#6b7280' }}>Nenhum operador disponÃ­vel</Text>}
+                </View>
+              )}
+            </>
+          ) : (
           <TextInput
-            value={colaborador}
+            value={usuario.dsPessoa}
             onChangeText={setColaborador}
             keyboardType="numeric"
             placeholder="Ex: 1234"
             placeholderTextColor="#9ca3af"
-            style={input}
-            editable={!loading}
+            style={[input, !podeAtribuirOperador && { backgroundColor: '#e5e2d8', color: '#6b7280' }]}
+            editable={!loading && podeAtribuirOperador}
           />
+          )}
 
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 24 }}>
             <Pressable

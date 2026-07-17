@@ -32,9 +32,9 @@ const CARDS: Card[] = [
   },
   {
     id: 'faixas',
-    label: 'Faixas',
-    descricao: 'Cadastro de faixas de peso por produto',
-    icon: 'sliders',
+    label: 'Produtos',
+    descricao: 'Faixas de peso e itens por caixa de cada produto',
+    icon: 'package',
   },
   {
     id: 'configuracoes',

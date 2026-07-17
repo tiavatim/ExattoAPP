@@ -17,7 +17,12 @@ export interface DashboardLinha {
 
 export interface IniciarSessaoRequest {
   lote: number;
-  idColaborador: number;
+  idColaborador?: number;
+}
+
+export interface OperadorItem {
+  id: number;
+  nome: string;
 }
 
 export interface LineSettings {
@@ -201,9 +206,14 @@ export interface ProdutoItem {
   idProduto: number;
   cdProduto: string;
   dsProduto: string;
+  /** Qtd por caixa da OP mais recente do produto (0 = não informada). */
+  qtdPorCaixaOp: number;
 }
 
-export interface OpData extends ProdutoItem {
+export interface OpData {
+  idProduto: number;
+  cdProduto: string;
+  dsProduto: string;
   lote: number;
   codigoBarra: string;
   fabricacao: string;
