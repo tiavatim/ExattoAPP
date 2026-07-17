@@ -48,6 +48,41 @@ function InfoRow({ icon, label, value }: InfoRowProps) {
   );
 }
 
+export function RastreabilidadeDetalheCard({ item }: { item: RastreabilidadeItem }) {
+  return (
+    <View style={{ backgroundColor: '#f0ead6', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#e0ddd4' }}>
+      {/* Produto */}
+      <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 17, color: '#163029', marginBottom: 2 }}>
+        {item.dsProduto}
+      </Text>
+      <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 13, color: '#2F4B44', marginBottom: 12 }}>
+        {item.cdProduto}
+      </Text>
+
+      {/* Badge resultado */}
+      <View style={{ marginBottom: 12 }}>
+        <ResultadoBadge nr={item.nrResultadoComparacao} />
+      </View>
+
+      {/* Dados */}
+      <InfoRow icon="tag"       label="OP / Lote"    value={String(item.lote)} />
+      <InfoRow icon="activity"  label="Linha"        value={item.linhaNome} />
+      <InfoRow icon="clock"     label="Pesado em"    value={formatarData(item.dtPesagem)} />
+      <InfoRow icon="droplet"   label="Peso bruto"   value={`${item.vlPesoBruto.toFixed(3)} ${item.dsUnidade}`} />
+      <InfoRow icon="minus"     label="Tara"         value={`${item.vlTara.toFixed(3)} ${item.dsUnidade}`} />
+      <InfoRow icon="user"      label="Operador"     value={item.operador || '—'} />
+      <InfoRow icon="calendar"  label="Fabricação"   value={item.fabricacao || '—'} />
+      <InfoRow icon="clock"     label="Validade"     value={item.validade || '—'} />
+
+      <View style={{ marginTop: 4, paddingTop: 8 }}>
+        <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 11, color: '#9ca3af' }}>
+          {item.nrRastreabilidade}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 interface Props {
   onBack: () => void;
 }

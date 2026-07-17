@@ -28,9 +28,14 @@ import {
 
 // ─── Tipos locais ─────────────────────────────────────────────────────────────
 
-type ConfigTab = 'linhas' | 'impressoras' | 'faixas' | 'geral';
+type ConfigTab = 'linhas' | 'impressoras' | 'geral';
 
 const GUID_VAZIO = '00000000-0000-0000-0000-000000000000';
+const COR_FAIXA_VERDE = '#166534';
+const COR_FAIXA_AMARELA = '#facc15';
+const COR_FUNDO_FAIXA_AMARELA = '#fff7cc';
+const COR_TEXTO_FAIXA_AMARELA = '#3a2a00';
+const COR_BORDA_FAIXA_AMARELA = '#eab308';
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
@@ -58,7 +63,6 @@ export default function ConfiguracoesView({ onBack }: Props) {
           {([
             { id: 'linhas',      label: 'Linhas' },
             { id: 'impressoras', label: 'Impressoras' },
-            { id: 'faixas',      label: 'Faixas' },
             { id: 'geral',       label: 'Geral' },
           ] as { id: ConfigTab; label: string }[]).map((t) => (
             <TouchableOpacity key={t.id} onPress={() => setTab(t.id)}
@@ -75,7 +79,6 @@ export default function ConfiguracoesView({ onBack }: Props) {
 
       {tab === 'linhas'      && <LinhasTab />}
       {tab === 'impressoras' && <ImpressorasTab />}
-      {tab === 'faixas'      && <FaixasTab />}
       {tab === 'geral'       && <GeralTab />}
     </View>
   );
@@ -788,10 +791,34 @@ export function FaixasTab() {
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               <PesoChip label="Alvo"   valor={item.pesoAlvo}   cor="#163029" />
-              <PesoChip label="Verde ↓" valor={item.verdeMin}  cor="#22c55e" />
-              <PesoChip label="Verde ↑" valor={item.verdeMax}  cor="#22c55e" />
-              <PesoChip label="Amar. ↓" valor={item.amarelaMin} cor="#f59e0b" />
-              <PesoChip label="Amar. ↑" valor={item.amarelaMax} cor="#f59e0b" />
+              <PesoChip
+                label="Verde ↓"
+                valor={item.verdeMin}
+                cor={COR_TEXTO_FAIXA_AMARELA}
+                fundoCor={COR_FAIXA_VERDE + '22'}
+                bordaCor={COR_FAIXA_VERDE + '66'}
+              />
+              <PesoChip
+                label="Verde ↑"
+                valor={item.verdeMax}
+                cor={COR_TEXTO_FAIXA_AMARELA}
+                fundoCor={COR_FAIXA_VERDE + '22'}
+                bordaCor={COR_FAIXA_VERDE + '66'}
+              />
+              <PesoChip
+                label="Amar. ↓"
+                valor={item.amarelaMin}
+                cor={COR_TEXTO_FAIXA_AMARELA}
+                fundoCor={COR_FUNDO_FAIXA_AMARELA}
+                bordaCor={COR_BORDA_FAIXA_AMARELA}
+              />
+              <PesoChip
+                label="Amar. ↑"
+                valor={item.amarelaMax}
+                cor={COR_TEXTO_FAIXA_AMARELA}
+                fundoCor={COR_FUNDO_FAIXA_AMARELA}
+                bordaCor={COR_BORDA_FAIXA_AMARELA}
+              />
             </View>
           </View>
         )}
@@ -818,10 +845,16 @@ export function FaixasTab() {
   );
 }
 
-function PesoChip({ label, valor, cor }: { label: string; valor: number; cor: string }) {
+function PesoChip({ label, valor, cor, fundoCor, bordaCor }: {
+  label: string;
+  valor: number;
+  cor: string;
+  fundoCor?: string;
+  bordaCor?: string;
+}) {
   return (
-    <View style={{ backgroundColor: cor + '18', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4,
-      borderWidth: 1, borderColor: cor + '44' }}>
+    <View style={{ backgroundColor: fundoCor ?? cor + '22', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4,
+      borderWidth: 1, borderColor: bordaCor ?? cor + '66' }}>
       <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 10, color: cor }}>{label}</Text>
       <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 13, color: cor }}>{valor.toFixed(3)} kg</Text>
     </View>
@@ -960,7 +993,7 @@ export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, prod
 
             {/* Faixa Verde */}
             <View>
-              <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 13, color: '#22c55e', marginBottom: 8 }}>
+              <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 13, color: COR_FAIXA_VERDE, marginBottom: 8 }}>
                 Faixa Verde (kg)
               </Text>
               <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -981,9 +1014,13 @@ export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, prod
 
             {/* Faixa Amarela */}
             <View>
-              <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 13, color: '#f59e0b', marginBottom: 8 }}>
-                Faixa Amarela (kg)
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: COR_FAIXA_AMARELA,
+                  borderWidth: 1, borderColor: COR_BORDA_FAIXA_AMARELA }} />
+                <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 13, color: '#163029' }}>
+                  Faixa Amarela (kg)
+                </Text>
+              </View>
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <View style={{ flex: 1 }}>
                   <Text style={fLabel}>Mínimo</Text>

@@ -66,6 +66,10 @@ export interface PesagemItem {
   idOperador: number | null;
   dsOperador: string | null;
   lote: number;
+  CD_PRODUTO?: string | null;
+  DS_PRODUTO?: string | null;
+  cdProduto?: string | null;
+  dsProduto?: string | null;
 }
 
 export interface SessaoHistoricoItem {

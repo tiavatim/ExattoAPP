@@ -39,7 +39,7 @@ const CARDS: Card[] = [
   {
     id: 'configuracoes',
     label: 'Configurações',
-    descricao: 'Faixas de peso, sincronização e parâmetros operacionais',
+    descricao: 'Sincronização e parâmetros operacionais',
     icon: 'settings',
   },
 ];
