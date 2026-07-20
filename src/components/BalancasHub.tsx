@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useUser } from '@/contexts/UserContext';
 
 export type BalancasView = 'hub' | 'acabamento' | 'relatorios' | 'rastreabilidade' | 'faixas' | 'configuracoes';
 
@@ -49,6 +50,15 @@ interface Props {
 }
 
 export default function BalancasHub({ onNavigate }: Props) {
+  const { temAcesso } = useUser();
+  const podeAcessarConfiguracoes =
+    temAcesso('/balancas/configuracoes/linhas') ||
+    temAcesso('/balancas/configuracoes/impressoras') ||
+    temAcesso('/balancas/configuracoes/gerais') ||
+    temAcesso('/balancas/configuracoes/sincronizacao') ||
+    temAcesso('/balancas/configuracoes/impressao');
+  const cardsVisiveis = CARDS.filter(card => card.id !== 'configuracoes' || podeAcessarConfiguracoes);
+
   return (
     <ScrollView
       contentContainerStyle={{ padding: 16, gap: 12 }}
@@ -59,7 +69,7 @@ export default function BalancasHub({ onNavigate }: Props) {
       </Text>
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-        {CARDS.map((card) => (
+        {cardsVisiveis.map((card) => (
           <Pressable
             key={card.id}
             onPress={() => onNavigate(card.id)}

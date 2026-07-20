@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
+import { useUser } from '@/contexts/UserContext';
 import ti400Service from '@/services/ti400Service';
 import {
   ConfigAtual,
@@ -90,7 +91,38 @@ function ConfirmacaoModal({ confirmacao, onCancelar }: {
 }
 
 export default function ConfiguracoesView({ onBack }: Props) {
+  const { temAcesso } = useUser();
   const [tab, setTab] = useState<ConfigTab>('linhas');
+  const podeLinhas = temAcesso('/balancas/configuracoes/linhas');
+  const podeImpressoras = temAcesso('/balancas/configuracoes/impressoras');
+  const podeGeral = temAcesso('/balancas/configuracoes/gerais')
+    || temAcesso('/balancas/configuracoes/sincronizacao')
+    || temAcesso('/balancas/configuracoes/impressao');
+  const tabsPermitidas = ([
+    { id: 'linhas', label: 'Linhas', permitido: podeLinhas },
+    { id: 'impressoras', label: 'Impressoras', permitido: podeImpressoras },
+    { id: 'geral', label: 'Geral', permitido: podeGeral },
+  ] as { id: ConfigTab; label: string; permitido: boolean }[]).filter(t => t.permitido);
+
+  useEffect(() => {
+    if (tabsPermitidas.length > 0 && !tabsPermitidas.some(t => t.id === tab))
+      setTab(tabsPermitidas[0].id);
+  }, [tab, podeLinhas, podeImpressoras, podeGeral]);
+
+  if (tabsPermitidas.length === 0) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Feather name="lock" size={36} color="#6b7280" />
+        <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 16, color: '#163029', marginTop: 12 }}>
+          Acesso não autorizado
+        </Text>
+        <Pressable onPress={onBack} style={{ marginTop: 16, paddingHorizontal: 18, paddingVertical: 10,
+          borderRadius: 8, backgroundColor: '#163029' }}>
+          <Text style={{ fontFamily: 'Sina-Nova-Bold', color: '#fff' }}>Voltar</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1 }}>
@@ -106,11 +138,7 @@ export default function ConfiguracoesView({ onBack }: Props) {
         </View>
 
         <View style={{ flexDirection: 'row', backgroundColor: '#c4bfb0', borderRadius: 8, padding: 3 }}>
-          {([
-            { id: 'linhas',      label: 'Linhas' },
-            { id: 'impressoras', label: 'Impressoras' },
-            { id: 'geral',       label: 'Geral' },
-          ] as { id: ConfigTab; label: string }[]).map((t) => (
+          {tabsPermitidas.map((t) => (
             <TouchableOpacity key={t.id} onPress={() => setTab(t.id)}
               style={{ flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center',
                 backgroundColor: tab === t.id ? '#163029' : 'transparent' }}>
@@ -123,9 +151,9 @@ export default function ConfiguracoesView({ onBack }: Props) {
         </View>
       </View>
 
-      {tab === 'linhas'      && <LinhasTab />}
-      {tab === 'impressoras' && <ImpressorasTab />}
-      {tab === 'geral'       && <GeralTab />}
+      {tab === 'linhas' && podeLinhas && <LinhasTab />}
+      {tab === 'impressoras' && podeImpressoras && <ImpressorasTab />}
+      {tab === 'geral' && podeGeral && <GeralTab />}
     </View>
   );
 }
