@@ -3,6 +3,7 @@ export type StatusSessao = 'Aguardando' | 'Imprimindo' | 'Concluido' | 'Erro' | 
 export interface DashboardSessao {
   lote: number;
   idColaborador: number;
+  dsColaborador: string | null;
   status: StatusSessao;
   iniciada: string;
   tentativasErro: number;
@@ -37,6 +38,8 @@ export interface LineSettings {
 export interface FaixaPeso {
   id: number;
   idProduto: number;
+  cdProduto?: string | null;
+  dsProduto?: string | null;
   pesoAlvo: number;
   verdeMin: number;
   verdeMax: number;
@@ -49,6 +52,7 @@ export interface WeighingSession {
   lote: number;
   idProduto: number;
   idColaborador: number;
+  dsColaborador: string | null;
   quantidade: string;
   faixa: FaixaPeso;
   status: StatusSessao;
@@ -70,6 +74,8 @@ export interface PesagemItem {
   nrResultadoComparacao: number | null;
   idOperador: number | null;
   dsOperador: string | null;
+  idColaboradorSessao: number;
+  dsColaboradorSessao: string | null;
   lote: number;
   CD_PRODUTO?: string | null;
   DS_PRODUTO?: string | null;
@@ -101,7 +107,10 @@ export interface RastreabilidadeItem {
   vlTara: number;
   dsUnidade: string;
   nrResultadoComparacao: number | null;
-  operador: string;
+  idColaboradorSessao: number;
+  dsColaboradorSessao: string | null;
+  idOperadorTerminal: number | null;
+  dsOperadorTerminal: string | null;
   lote: number;
   cdProduto: string;
   dsProduto: string;
@@ -182,6 +191,7 @@ export interface RelatorioParametros {
   sessaoId?: string;
   idProduto?: number;
   idColaborador?: number;
+  formato?: 'xlsx';
 }
 
 export interface CriarRelatorioRequest {

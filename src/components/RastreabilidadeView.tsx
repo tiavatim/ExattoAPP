@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -9,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import Toast from 'react-native-toast-message';
 import ti400Service from '@/services/ti400Service';
 import { RastreabilidadeItem, RESULTADO_COR, RESULTADO_LABEL } from '@/interfaces/ti400Interface';
@@ -70,7 +72,8 @@ export function RastreabilidadeDetalheCard({ item }: { item: RastreabilidadeItem
       <InfoRow icon="clock"     label="Pesado em"    value={formatarData(item.dtPesagem)} />
       <InfoRow icon="droplet"   label="Peso bruto"   value={`${item.vlPesoBruto.toFixed(3)} ${item.dsUnidade}`} />
       <InfoRow icon="minus"     label="Tara"         value={`${item.vlTara.toFixed(3)} ${item.dsUnidade}`} />
-      <InfoRow icon="user"      label="Operador"     value={item.operador || '—'} />
+      <InfoRow icon="user" label="Colaborador APP" value={`${item.dsColaboradorSessao || 'N/A'} · ID ${item.idColaboradorSessao}`} />
+      <InfoRow icon="monitor" label="Operador terminal" value={`${item.dsOperadorTerminal || 'N/A'}${item.idOperadorTerminal != null ? ` · ID ${item.idOperadorTerminal}` : ''}`} />
       <InfoRow icon="calendar"  label="Fabricação"   value={item.fabricacao || '—'} />
       <InfoRow icon="clock"     label="Validade"     value={item.validade || '—'} />
 
@@ -93,9 +96,12 @@ export default function RastreabilidadeView({ onBack }: Props) {
   const [item, setItem]       = useState<RastreabilidadeItem | null>(null);
   const [naoEncontrado, setNaoEncontrado] = useState(false);
   const [reimprimindo, setReimprimindo]   = useState(false);
+  const [scannerAberto, setScannerAberto] = useState(false);
+  const [qrLido, setQrLido] = useState(false);
+  const [cameraPermission, solicitarCameraPermission] = useCameraPermissions();
 
-  async function buscar() {
-    const nr = codigo.trim();
+  async function buscar(codigoInformado?: string) {
+    const nr = (codigoInformado ?? codigo).trim();
     if (!nr) return;
     setLoading(true);
     setItem(null);
@@ -112,6 +118,35 @@ export default function RastreabilidadeView({ onBack }: Props) {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function abrirScanner() {
+    let permissao = cameraPermission;
+    if (!permissao?.granted) permissao = await solicitarCameraPermission();
+    if (!permissao.granted) {
+      Toast.show({ type: 'error', text1: 'Câmera não autorizada',
+        text2: 'Permita o uso da câmera nas configurações do tablet para escanear o QR Code.' });
+      return;
+    }
+    setQrLido(false);
+    setScannerAberto(true);
+  }
+
+  function codigoDoQr(valor: string) {
+    const texto = valor.trim();
+    const caminho = /\/api\/rastreabilidade\/([^/?#]+)/i.exec(texto);
+    if (caminho?.[1]) return decodeURIComponent(caminho[1]);
+    return texto;
+  }
+
+  function aoLerQr({ data }: { data: string }) {
+    if (qrLido) return;
+    const nr = codigoDoQr(data);
+    if (!nr) return;
+    setQrLido(true);
+    setScannerAberto(false);
+    setCodigo(nr);
+    void buscar(nr);
   }
 
   async function reimprimir() {
@@ -149,30 +184,39 @@ export default function RastreabilidadeView({ onBack }: Props) {
           Código da etiqueta
         </Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TextInput
-            value={codigo}
-            onChangeText={setCodigo}
-            onSubmitEditing={buscar}
-            returnKeyType="search"
-            placeholder="Ex: a1b2c3-0000000000042"
-            placeholderTextColor="#9ca3af"
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={{
+          <View style={{ flex: 1, position: 'relative' }}>
+            <TextInput
+              value={codigo}
+              onChangeText={setCodigo}
+              onSubmitEditing={() => buscar()}
+              returnKeyType="search"
+              placeholder="Ex: a1b2c3-0000000000042"
+              placeholderTextColor="#9ca3af"
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={{
               flex: 1,
               backgroundColor: '#f0ead6',
               borderRadius: 8,
               paddingVertical: 12,
-              paddingHorizontal: 14,
+              paddingLeft: 14,
+              paddingRight: 52,
               fontSize: 15,
               fontFamily: 'Sina-Nova-Regular',
               color: '#163029',
               borderWidth: 1,
               borderColor: '#c8c4ba',
-            }}
-          />
+              }}
+            />
+            <Pressable onPress={abrirScanner} accessibilityRole="button"
+              accessibilityLabel="Escanear QR Code de rastreabilidade com a câmera"
+              hitSlop={8} style={{ position: 'absolute', right: 4, top: 4, bottom: 4, width: 42,
+                borderRadius: 7, justifyContent: 'center', alignItems: 'center' }}>
+              <Feather name="camera" size={21} color="#163029" />
+            </Pressable>
+          </View>
           <Pressable
-            onPress={buscar}
+            onPress={() => buscar()}
             disabled={!codigo.trim() || loading}
             style={{
               backgroundColor: codigo.trim() && !loading ? '#163029' : '#9ca3af',
@@ -221,7 +265,8 @@ export default function RastreabilidadeView({ onBack }: Props) {
               <InfoRow icon="clock"     label="Pesado em"    value={formatarData(item.dtPesagem)} />
               <InfoRow icon="droplet"   label="Peso bruto"   value={`${item.vlPesoBruto.toFixed(3)} ${item.dsUnidade}`} />
               <InfoRow icon="minus"     label="Tara"         value={`${item.vlTara.toFixed(3)} ${item.dsUnidade}`} />
-              <InfoRow icon="user"      label="Operador"     value={item.operador || '—'} />
+              <InfoRow icon="user" label="Colaborador APP" value={`${item.dsColaboradorSessao || 'N/A'} · ID ${item.idColaboradorSessao}`} />
+              <InfoRow icon="monitor" label="Operador terminal" value={`${item.dsOperadorTerminal || 'N/A'}${item.idOperadorTerminal != null ? ` · ID ${item.idOperadorTerminal}` : ''}`} />
               <InfoRow icon="calendar"  label="Fabricação"   value={item.fabricacao || '—'} />
               <InfoRow icon="clock"     label="Validade"     value={item.validade || '—'} />
 
@@ -246,6 +291,32 @@ export default function RastreabilidadeView({ onBack }: Props) {
           </View>
         )}
       </View>
+
+      <Modal visible={scannerAberto} animationType="slide" onRequestClose={() => setScannerAberto(false)}>
+        <View style={{ flex: 1, backgroundColor: '#0b1714' }}>
+          <View style={{ paddingHorizontal: 16, paddingVertical: 14, flexDirection: 'row',
+            alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#163029' }}>
+            <View>
+              <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 18, color: '#fff' }}>Escanear rastreabilidade</Text>
+              <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 12, color: '#d1ccbd' }}>
+                Aponte a câmera para o QR Code da etiqueta
+              </Text>
+            </View>
+            <Pressable onPress={() => setScannerAberto(false)} accessibilityLabel="Fechar câmera"
+              hitSlop={10} style={{ padding: 8 }}>
+              <Feather name="x" size={24} color="#fff" />
+            </Pressable>
+          </View>
+          <CameraView style={{ flex: 1 }} facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            onBarcodeScanned={qrLido ? undefined : aoLerQr}>
+            <View pointerEvents="none" style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <View style={{ width: '62%', maxWidth: 420, aspectRatio: 1, borderWidth: 3,
+                borderColor: '#fff', borderRadius: 18, backgroundColor: 'transparent' }} />
+            </View>
+          </CameraView>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }

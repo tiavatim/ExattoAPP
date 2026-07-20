@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -37,10 +36,57 @@ const COR_FUNDO_FAIXA_AMARELA = '#fff7cc';
 const COR_TEXTO_FAIXA_AMARELA = '#3a2a00';
 const COR_BORDA_FAIXA_AMARELA = '#eab308';
 
+function horariosSyncValidos(valor: string) {
+  const partes = valor.split(',').map(v => v.trim()).filter(Boolean);
+  return partes.length > 0 && partes.every(v => /^([01]\d|2[0-3]):[0-5]\d$/.test(v));
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 interface Props {
   onBack: () => void;
+}
+
+interface ConfirmacaoState {
+  titulo: string;
+  mensagem: string;
+  confirmarTexto: string;
+  destrutiva?: boolean;
+  onConfirmar: () => void | Promise<void>;
+}
+
+function ConfirmacaoModal({ confirmacao, onCancelar }: {
+  confirmacao: ConfirmacaoState | null;
+  onCancelar: () => void;
+}) {
+  if (!confirmacao) return null;
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onCancelar}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 20 }}>
+        <View style={{ alignSelf: 'center', width: '100%', maxWidth: 440,
+          backgroundColor: '#f0ead6', borderRadius: 14, padding: 20 }}>
+          <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 18, color: '#163029', marginBottom: 8 }}>
+            {confirmacao.titulo}
+          </Text>
+          <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 14, lineHeight: 20,
+            color: '#2F4B44', marginBottom: 20 }}>
+            {confirmacao.mensagem}
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <Pressable onPress={onCancelar} style={{ flex: 1, paddingVertical: 12, borderRadius: 8,
+              borderWidth: 1, borderColor: '#163029', alignItems: 'center' }}>
+              <Text style={{ fontFamily: 'Sina-Nova-Bold', color: '#163029' }}>Cancelar</Text>
+            </Pressable>
+            <Pressable onPress={() => { const acao = confirmacao.onConfirmar; onCancelar(); void acao(); }}
+              style={{ flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center',
+                backgroundColor: confirmacao.destrutiva ? '#b91c1c' : '#163029' }}>
+              <Text style={{ fontFamily: 'Sina-Nova-Bold', color: '#fff' }}>{confirmacao.confirmarTexto}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
 }
 
 export default function ConfiguracoesView({ onBack }: Props) {
@@ -91,6 +137,8 @@ function LinhasTab() {
   const [impressoras, setImpressoras] = useState<Impressora[]>([]);
   const [loading, setLoading]         = useState(true);
   const [modalLinha, setModalLinha]   = useState<LinhaCadastro | null>(null);
+  const [desativandoId, setDesativandoId] = useState<string | null>(null);
+  const [confirmacao, setConfirmacao] = useState<ConfirmacaoState | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -108,22 +156,22 @@ function LinhasTab() {
   useEffect(() => { carregar(); }, [carregar]);
 
   function confirmarDesativar(linha: LinhaCadastro) {
-    Alert.alert(
-      'Desativar linha',
-      `Desativar a linha "${linha.nome}"? Ela deixará de aparecer no painel e não aceitará novas sessões.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Desativar', style: 'destructive', onPress: async () => {
+    setConfirmacao({
+      titulo: 'Desativar linha',
+      mensagem: `Desativar a linha "${linha.nome}"? Ela deixará de aparecer no painel e não aceitará novas sessões.`,
+      confirmarTexto: 'Desativar',
+      destrutiva: true,
+      onConfirmar: async () => {
+          setDesativandoId(linha.id);
           try {
             await ti400Service.desativarLinha(linha.id);
             setLinhas(prev => prev.map(l => l.id === linha.id ? { ...l, ativa: false } : l));
             Toast.show({ type: 'success', text1: 'Linha desativada' });
           } catch (err: any) {
             Toast.show({ type: 'error', text1: 'Erro ao desativar', text2: err.response?.data?.error ?? err.message });
-          }
-        }},
-      ],
-    );
+          } finally { setDesativandoId(null); }
+      },
+    });
   }
 
   async function salvarLinha(linha: LinhaCadastro) {
@@ -171,8 +219,11 @@ function LinhasTab() {
                   <Feather name="edit-2" size={17} color="#2F4B44" />
                 </Pressable>
                 {item.ativa && (
-                  <Pressable onPress={() => confirmarDesativar(item)} hitSlop={8}>
-                    <Feather name="slash" size={17} color="#ef4444" />
+                  <Pressable onPress={() => confirmarDesativar(item)} hitSlop={8} disabled={desativandoId !== null}
+                    accessibilityLabel={`Desativar linha ${item.nome}`}>
+                    {desativandoId === item.id
+                      ? <ActivityIndicator size="small" color="#ef4444" />
+                      : <Feather name="slash" size={17} color="#ef4444" />}
                   </Pressable>
                 )}
               </View>
@@ -202,6 +253,7 @@ function LinhasTab() {
           onCancelar={() => setModalLinha(null)}
         />
       )}
+      <ConfirmacaoModal confirmacao={confirmacao} onCancelar={() => setConfirmacao(null)} />
     </>
   );
 }
@@ -243,8 +295,16 @@ function LinhaModal({ linha, impressoras, onSalvar, onCancelar }: LinhaModalProp
   const [ativa, setAtiva]                 = useState(linha.ativa);
   const [saving, setSaving]               = useState(false);
   const [pickerAberto, setPickerAberto]   = useState(false);
+  const [confirmacao, setConfirmacao] = useState<ConfirmacaoState | null>(null);
 
   const impressoraSelecionada = impressoras.find(i => i.id === idImpressora);
+  const alterado = nome.trim() !== linha.nome.trim()
+    || ip.trim() !== linha.ip.trim()
+    || porta !== String(linha.porta)
+    || timeoutConn !== String(linha.timeoutConnMs)
+    || timeoutRead !== String(linha.timeoutReadMs)
+    || idImpressora !== linha.idImpressora
+    || ativa !== linha.ativa;
 
   function validar(): string | null {
     if (!nome.trim()) return 'Nome é obrigatório.';
@@ -256,7 +316,7 @@ function LinhaModal({ linha, impressoras, onSalvar, onCancelar }: LinhaModalProp
     return null;
   }
 
-  async function salvar() {
+  async function executarSalvar() {
     const erro = validar();
     if (erro) { Toast.show({ type: 'error', text1: erro }); return; }
     setSaving(true);
@@ -268,6 +328,16 @@ function LinhaModal({ linha, impressoras, onSalvar, onCancelar }: LinhaModalProp
       idImpressora, impressoraNome: null, ativa,
     });
     setSaving(false);
+  }
+
+  function salvar() {
+    const erro = validar();
+    if (erro) { Toast.show({ type: 'error', text1: erro }); return; }
+    setConfirmacao({
+      titulo: linha.id === GUID_VAZIO ? 'Criar linha' : 'Salvar alterações',
+      mensagem: linha.id === GUID_VAZIO ? `Confirma a criação da linha "${nome.trim()}"?` : `Confirma as alterações da linha "${linha.nome}"?`,
+      confirmarTexto: 'Confirmar', onConfirmar: executarSalvar,
+    });
   }
 
   return (
@@ -375,9 +445,9 @@ function LinhaModal({ linha, impressoras, onSalvar, onCancelar }: LinhaModalProp
                   borderWidth: 1, borderColor: '#163029', alignItems: 'center' }}>
                 <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 15, color: '#163029' }}>Cancelar</Text>
               </Pressable>
-              <Pressable onPress={salvar} disabled={saving}
+              <Pressable onPress={salvar} disabled={saving || !alterado}
                 style={{ flex: 1, paddingVertical: 12, borderRadius: 8,
-                  backgroundColor: saving ? '#9ca3af' : '#163029',
+                  backgroundColor: (saving || !alterado) ? '#9ca3af' : '#163029',
                   flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
                 {saving
                   ? <ActivityIndicator color="#d1ccbd" size="small" />
@@ -390,6 +460,7 @@ function LinhaModal({ linha, impressoras, onSalvar, onCancelar }: LinhaModalProp
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+      <ConfirmacaoModal confirmacao={confirmacao} onCancelar={() => setConfirmacao(null)} />
     </Modal>
   );
 }
@@ -403,6 +474,8 @@ function ImpressorasTab() {
   const [loading, setLoading]         = useState(true);
   const [modalImp, setModalImp]       = useState<Impressora | null>(null);
   const [testandoId, setTestandoId]   = useState<string | null>(null);
+  const [desativandoId, setDesativandoId] = useState<string | null>(null);
+  const [confirmacao, setConfirmacao] = useState<ConfirmacaoState | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -415,22 +488,22 @@ function ImpressorasTab() {
   useEffect(() => { carregar(); }, [carregar]);
 
   function confirmarDesativar(imp: Impressora) {
-    Alert.alert(
-      'Desativar impressora',
-      `Desativar a impressora "${imp.nome}"?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Desativar', style: 'destructive', onPress: async () => {
+    setConfirmacao({
+      titulo: 'Desativar impressora',
+      mensagem: `Desativar a impressora "${imp.nome}"?`,
+      confirmarTexto: 'Desativar',
+      destrutiva: true,
+      onConfirmar: async () => {
+          setDesativandoId(imp.id);
           try {
             await ti400Service.desativarImpressora(imp.id);
             setImpressoras(prev => prev.map(i => i.id === imp.id ? { ...i, ativa: false } : i));
             Toast.show({ type: 'success', text1: 'Impressora desativada' });
           } catch (err: any) {
             Toast.show({ type: 'error', text1: 'Erro ao desativar', text2: err.response?.data?.error ?? err.message });
-          }
-        }},
-      ],
-    );
+          } finally { setDesativandoId(null); }
+      },
+    });
   }
 
   async function testarImpressao(imp: Impressora) {
@@ -498,8 +571,11 @@ function ImpressorasTab() {
                   <Feather name="edit-2" size={17} color="#2F4B44" />
                 </Pressable>
                 {item.ativa && (
-                  <Pressable onPress={() => confirmarDesativar(item)} hitSlop={8}>
-                    <Feather name="slash" size={17} color="#ef4444" />
+                  <Pressable onPress={() => confirmarDesativar(item)} hitSlop={8} disabled={desativandoId !== null}
+                    accessibilityLabel={`Desativar impressora ${item.nome}`}>
+                    {desativandoId === item.id
+                      ? <ActivityIndicator size="small" color="#ef4444" />
+                      : <Feather name="slash" size={17} color="#ef4444" />}
                   </Pressable>
                 )}
               </View>
@@ -530,6 +606,7 @@ function ImpressorasTab() {
           onCancelar={() => setModalImp(null)}
         />
       )}
+      <ConfirmacaoModal confirmacao={confirmacao} onCancelar={() => setConfirmacao(null)} />
     </>
   );
 }
@@ -554,6 +631,17 @@ function ImpressoraModal({ impressora, onSalvar, onCancelar }: ImpressoraModalPr
   const [descricao, setDescricao] = useState(impressora.descricao ?? '');
   const [ativa, setAtiva]         = useState(impressora.ativa);
   const [saving, setSaving]       = useState(false);
+  const [confirmacao, setConfirmacao] = useState<ConfirmacaoState | null>(null);
+  const alterado = nome.trim() !== impressora.nome.trim()
+    || ip.trim() !== impressora.ip.trim()
+    || porta !== String(impressora.porta)
+    || linguagem !== impressora.linguagem
+    || codePage.trim().toUpperCase() !== impressora.codePage.trim().toUpperCase()
+    || dpi !== String(impressora.dpi)
+    || larguraMm.replace(',', '.') !== String(impressora.larguraMm)
+    || alturaMm.replace(',', '.') !== String(impressora.alturaMm)
+    || descricao.trim() !== (impressora.descricao ?? '').trim()
+    || ativa !== impressora.ativa;
 
   function validar(): string | null {
     if (!nome.trim()) return 'Nome é obrigatório.';
@@ -569,7 +657,7 @@ function ImpressoraModal({ impressora, onSalvar, onCancelar }: ImpressoraModalPr
     return null;
   }
 
-  async function salvar() {
+  async function executarSalvar() {
     const erro = validar();
     if (erro) { Toast.show({ type: 'error', text1: erro }); return; }
     setSaving(true);
@@ -581,6 +669,16 @@ function ImpressoraModal({ impressora, onSalvar, onCancelar }: ImpressoraModalPr
       descricao: descricao.trim() || null, ativa,
     });
     setSaving(false);
+  }
+
+  function salvar() {
+    const erro = validar();
+    if (erro) { Toast.show({ type: 'error', text1: erro }); return; }
+    setConfirmacao({
+      titulo: impressora.id === GUID_VAZIO ? 'Criar impressora' : 'Salvar alterações',
+      mensagem: impressora.id === GUID_VAZIO ? `Confirma a criação da impressora "${nome.trim()}"?` : `Confirma as alterações da impressora "${impressora.nome}"?`,
+      confirmarTexto: 'Confirmar', onConfirmar: executarSalvar,
+    });
   }
 
   return (
@@ -680,9 +778,9 @@ function ImpressoraModal({ impressora, onSalvar, onCancelar }: ImpressoraModalPr
                   borderWidth: 1, borderColor: '#163029', alignItems: 'center' }}>
                 <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 15, color: '#163029' }}>Cancelar</Text>
               </Pressable>
-              <Pressable onPress={salvar} disabled={saving}
+              <Pressable onPress={salvar} disabled={saving || !alterado}
                 style={{ flex: 1, paddingVertical: 12, borderRadius: 8,
-                  backgroundColor: saving ? '#9ca3af' : '#163029',
+                  backgroundColor: (saving || !alterado) ? '#9ca3af' : '#163029',
                   flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
                 {saving
                   ? <ActivityIndicator color="#d1ccbd" size="small" />
@@ -695,6 +793,7 @@ function ImpressoraModal({ impressora, onSalvar, onCancelar }: ImpressoraModalPr
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+      <ConfirmacaoModal confirmacao={confirmacao} onCancelar={() => setConfirmacao(null)} />
     </Modal>
   );
 }
@@ -706,6 +805,8 @@ export function FaixasTab() {
   const [produtos, setProdutos] = useState<ProdutoItem[]>([]);
   const [loading, setLoading]   = useState(true);
   const [modalFaixa, setModalFaixa] = useState<FaixaPeso | null>(null);
+  const [excluindoId, setExcluindoId] = useState<number | null>(null);
+  const [confirmacao, setConfirmacao] = useState<ConfirmacaoState | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -719,28 +820,30 @@ export function FaixasTab() {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  function nomeProduto(idProduto: number) {
+  function nomeProduto(idProduto: number, faixa?: FaixaPeso) {
     const p = produtos.find(x => x.idProduto === idProduto);
-    return p ? `${p.cdProduto} — ${p.dsProduto}` : `Produto #${idProduto}`;
+    const nome = p?.dsProduto ?? faixa?.dsProduto;
+    const codigo = p?.cdProduto ?? faixa?.cdProduto;
+    return nome && codigo ? `${nome} · Código ${codigo}` : `Produto não localizado · ID ${idProduto}`;
   }
 
   function confirmarDelete(faixa: FaixaPeso) {
-    Alert.alert(
-      'Remover faixa',
-      `Remover faixa de "${nomeProduto(faixa.idProduto)}"?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Remover', style: 'destructive', onPress: async () => {
+    setConfirmacao({
+      titulo: 'Remover produto',
+      mensagem: `Remover a configuração de peso de "${nomeProduto(faixa.idProduto, faixa)}"?`,
+      confirmarTexto: 'Remover',
+      destrutiva: true,
+      onConfirmar: async () => {
+          setExcluindoId(faixa.id);
           try {
             await ti400Service.deleteFaixa(faixa.id);
             setFaixas(prev => prev.filter(f => f.id !== faixa.id));
             Toast.show({ type: 'success', text1: 'Faixa removida' });
           } catch (err: any) {
             Toast.show({ type: 'error', text1: 'Erro ao remover', text2: err.message });
-          }
-        }},
-      ],
-    );
+          } finally { setExcluindoId(null); }
+      },
+    });
   }
 
   async function salvarFaixa(faixa: FaixaPeso) {
@@ -782,14 +885,16 @@ export function FaixasTab() {
               borderWidth: 1, borderColor: '#ddd8cc' }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
                 <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 14, color: '#163029', flex: 1 }}>
-                  {nomeProduto(item.idProduto)}
+                  {nomeProduto(item.idProduto, item)}
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 12 }}>
                   <Pressable onPress={() => setModalFaixa(item)} hitSlop={8}>
                     <Feather name="edit-2" size={17} color="#2F4B44" />
                   </Pressable>
-                  <Pressable onPress={() => confirmarDelete(item)} hitSlop={8}>
-                    <Feather name="trash-2" size={17} color="#ef4444" />
+                  <Pressable onPress={() => confirmarDelete(item)} hitSlop={8} disabled={excluindoId !== null}>
+                    {excluindoId === item.id
+                      ? <ActivityIndicator size="small" color="#ef4444" />
+                      : <Feather name="trash-2" size={17} color="#ef4444" />}
                   </Pressable>
                 </View>
               </View>
@@ -852,10 +957,12 @@ export function FaixasTab() {
         <FaixaModal
           faixa={modalFaixa}
           produtos={produtos}
+          produtoBloqueado={modalFaixa.id !== 0}
           onSalvar={salvarFaixa}
           onCancelar={() => setModalFaixa(null)}
         />
       )}
+      <ConfirmacaoModal confirmacao={confirmacao} onCancelar={() => setConfirmacao(null)} />
     </>
   );
 }
@@ -900,8 +1007,16 @@ export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, prod
   const [saving, setSaving]         = useState(false);
   const [buscaProduto, setBuscaProduto] = useState('');
   const [pickerAberto, setPickerAberto] = useState(idProduto === 0 && !produtoBloqueado);
+  const [confirmacao, setConfirmacao] = useState<ConfirmacaoState | null>(null);
 
   const produtoSelecionado = produtos.find(p => p.idProduto === idProduto);
+  const alterado = idProduto !== faixa.idProduto
+    || pesoAlvo.replace(',', '.') !== (faixa.pesoAlvo ? String(faixa.pesoAlvo) : '')
+    || verdeMin.replace(',', '.') !== (faixa.verdeMin ? String(faixa.verdeMin) : '')
+    || verdeMax.replace(',', '.') !== (faixa.verdeMax ? String(faixa.verdeMax) : '')
+    || amarelaMin.replace(',', '.') !== (faixa.amarelaMin ? String(faixa.amarelaMin) : '')
+    || amarelaMax.replace(',', '.') !== (faixa.amarelaMax ? String(faixa.amarelaMax) : '')
+    || qtdCaixa !== (produtoInicial?.qtdPorCaixaOp ? String(produtoInicial.qtdPorCaixaOp) : '');
   const produtosFiltrados  = produtos.filter(p => {
     const q = buscaProduto.toLowerCase();
     return !q || p.cdProduto.toLowerCase().includes(q) || p.dsProduto.toLowerCase().includes(q);
@@ -914,6 +1029,8 @@ export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, prod
     if ([alvo, vMin, vMax, aMin, aMax].some(v => isNaN(v) || v <= 0))
       return 'Todos os pesos devem ser maiores que zero.';
     if (aMin > vMin) return 'Amarela Mín deve ser ≤ Verde Mín.';
+    if (vMin > alvo) return 'Verde Mín deve ser ≤ Peso Alvo.';
+    if (alvo > vMax) return 'Peso Alvo deve ser ≤ Verde Máx.';
     if (vMin > vMax) return 'Verde Mín deve ser ≤ Verde Máx.';
     if (vMax > aMax) return 'Verde Máx deve ser ≤ Amarela Máx.';
     if (qtdObrigatoria && !qtdCaixa.trim())
@@ -923,7 +1040,7 @@ export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, prod
     return null;
   }
 
-  async function salvar() {
+  async function executarSalvar() {
     const erro = validar();
     if (erro) { Toast.show({ type: 'error', text1: erro }); return; }
     setSaving(true);
@@ -948,6 +1065,17 @@ export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, prod
     setSaving(false);
   }
 
+  function salvar() {
+    const erro = validar();
+    if (erro) { Toast.show({ type: 'error', text1: erro }); return; }
+    const nome = produtoSelecionado ? `${produtoSelecionado.dsProduto} (${produtoSelecionado.cdProduto})` : 'produto selecionado';
+    setConfirmacao({
+      titulo: faixa.id === 0 ? 'Criar configuração do produto' : 'Salvar alterações',
+      mensagem: `Confirma os dados de peso e quantidade para ${nome}?`,
+      confirmarTexto: 'Confirmar', onConfirmar: executarSalvar,
+    });
+  }
+
   return (
     <Modal visible transparent animationType="fade">
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -969,16 +1097,31 @@ export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, prod
             <View>
               <Text style={fLabel}>Produto</Text>
               {!pickerAberto ? (
-                <Pressable onPress={() => { if (!produtoBloqueado) setPickerAberto(true); }}
+                produtoBloqueado ? (
+                  <View style={{ ...fInput as any, flexDirection: 'row', alignItems: 'center',
+                    gap: 8, paddingVertical: 11, backgroundColor: '#e3ded2' }}>
+                    <Feather name="lock" size={14} color="#6b7280" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 13, color: '#163029' }}>
+                        {produtoSelecionado?.dsProduto ?? faixa.dsProduto ?? 'Produto não localizado'}
+                      </Text>
+                      <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 11, color: '#6b7280' }}>
+                        Código: {produtoSelecionado?.cdProduto ?? faixa.cdProduto ?? faixa.idProduto}
+                      </Text>
+                    </View>
+                  </View>
+                ) : (
+                <Pressable onPress={() => setPickerAberto(true)}
                   style={{ ...fInput as any, flexDirection: 'row', justifyContent: 'space-between',
                     alignItems: 'center', paddingVertical: 11 }}>
                   <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 14, color: '#163029', flex: 1 }}>
                     {produtoSelecionado
-                      ? `${produtoSelecionado.cdProduto} — ${produtoSelecionado.dsProduto}`
+                      ? `${produtoSelecionado.dsProduto} · Código ${produtoSelecionado.cdProduto}`
                       : 'Selecionar produto...'}
                   </Text>
-                  {!produtoBloqueado && <Feather name="chevron-down" size={16} color="#6b7280" />}
+                  <Feather name="chevron-down" size={16} color="#6b7280" />
                 </Pressable>
+                )
               ) : (
                 <View style={{ borderWidth: 1, borderColor: '#b8b4a6', borderRadius: 8, overflow: 'hidden' }}>
                   <TextInput
@@ -1008,10 +1151,10 @@ export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, prod
                           borderBottomWidth: 1, borderColor: '#e0dbd0',
                         })}>
                         <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 13, color: '#163029' }}>
-                          {p.cdProduto}
+                          {p.dsProduto}
                         </Text>
                         <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 12, color: '#2F4B44' }}>
-                          {p.dsProduto}
+                          Código: {p.cdProduto}
                         </Text>
                       </Pressable>
                     ))}
@@ -1098,9 +1241,9 @@ export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, prod
                   borderWidth: 1, borderColor: '#163029', alignItems: 'center' }}>
                 <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 15, color: '#163029' }}>Cancelar</Text>
               </Pressable>
-              <Pressable onPress={salvar} disabled={saving}
+              <Pressable onPress={salvar} disabled={saving || !alterado}
                 style={{ flex: 1, paddingVertical: 12, borderRadius: 8,
-                  backgroundColor: saving ? '#9ca3af' : '#163029',
+                  backgroundColor: (saving || !alterado) ? '#9ca3af' : '#163029',
                   flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
                 {saving
                   ? <ActivityIndicator color="#d1ccbd" size="small" />
@@ -1113,6 +1256,7 @@ export function FaixaModal({ faixa, produtos, onSalvar, onCancelar, titulo, prod
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+      <ConfirmacaoModal confirmacao={confirmacao} onCancelar={() => setConfirmacao(null)} />
     </Modal>
   );
 }
@@ -1125,6 +1269,7 @@ function GeralTab() {
   const [saving, setSaving]           = useState(false);
   const [syncingPull, setSyncingPull] = useState(false);
   const [syncingPush, setSyncingPush] = useState(false);
+  const [confirmacao, setConfirmacao] = useState<ConfirmacaoState | null>(null);
 
   // Form state (tudo string para facilitar inputs)
   const [pullModo, setPullModo]             = useState<'horarios' | 'intervalo'>('horarios');
@@ -1139,6 +1284,32 @@ function GeralTab() {
   const [retryMax, setRetryMax]             = useState('3');
   const [retentEnabled, setRetentEnabled]   = useState(true);
   const [retentDays, setRetentDays]         = useState('30');
+
+  const formValido = useMemo(() => {
+    const intervaloValido = (valor: string) => /^\d+$/.test(valor) && +valor >= 1 && +valor <= 24;
+    return (pullModo === 'horarios' ? horariosSyncValidos(pullHorarios) : intervaloValido(pullIntervalo))
+      && (pushModo === 'horarios' ? horariosSyncValidos(pushHorarios) : intervaloValido(pushIntervalo))
+      && ['todos', 'aprovados', 'nao_reprovados'].includes(compModo)
+      && /^\d+$/.test(retryDelay) && +retryDelay > 0
+      && /^\d+$/.test(retryMax) && +retryMax >= 0
+      && (!retentEnabled || (/^\d+$/.test(retentDays) && +retentDays > 0));
+  }, [pullModo, pullHorarios, pullIntervalo, pushModo, pushHorarios, pushIntervalo,
+    compModo, retryDelay, retryMax, retentEnabled, retentDays]);
+  const formAlterado = useMemo(() => {
+    if (!config) return false;
+    const times = (v: string) => v.split(',').map(x => x.trim()).filter(Boolean).join(',');
+    return pullModo !== (config.syncPullIntervalHoras > 0 ? 'intervalo' : 'horarios')
+      || (pullModo === 'horarios' ? times(pullHorarios) !== config.syncPullTimes.map(t => t.substring(0, 5)).join(',') : +pullIntervalo !== config.syncPullIntervalHoras)
+      || pushModo !== (config.syncPushIntervalHoras > 0 ? 'intervalo' : 'horarios')
+      || (pushModo === 'horarios' ? times(pushHorarios) !== config.syncPushTimes.map(t => t.substring(0, 5)).join(',') : +pushIntervalo !== config.syncPushIntervalHoras)
+      || compAtiva !== config.comparacaoAtiva
+      || compModo !== config.comparacaoModoImpressao
+      || +retryDelay !== config.retryDelaySeconds
+      || +retryMax !== config.retryMaxAttempts
+      || retentEnabled !== config.retentionEnabled
+      || +retentDays !== config.retentionDays;
+  }, [config, pullModo, pullHorarios, pullIntervalo, pushModo, pushHorarios, pushIntervalo,
+    compAtiva, compModo, retryDelay, retryMax, retentEnabled, retentDays]);
 
   const carregarConfig = useCallback(async () => {
     try {
@@ -1180,7 +1351,7 @@ function GeralTab() {
     setRetentDays(String(c.retentionDays));
   }
 
-  async function salvar() {
+  async function executarSalvar() {
     const entries: ConfigEntry[] = [];
 
     if (pullModo === 'horarios') {
@@ -1215,7 +1386,19 @@ function GeralTab() {
     } finally { setSaving(false); }
   }
 
-  async function forcePull() {
+  function salvar() {
+    if (!formValido) {
+      Toast.show({ type: 'error', text1: 'Revise os campos', text2: 'Horários usam HH:mm; intervalos aceitam de 1 a 24 horas.' });
+      return;
+    }
+    setConfirmacao({
+      titulo: 'Salvar configurações',
+      mensagem: 'Estas alterações afetam sincronização, comparação, tentativas e retenção. Deseja continuar?',
+      confirmarTexto: 'Salvar', onConfirmar: executarSalvar,
+    });
+  }
+
+  async function executarPull() {
     setSyncingPull(true);
     try {
       await ti400Service.syncPull();
@@ -1228,7 +1411,7 @@ function GeralTab() {
     } finally { setSyncingPull(false); }
   }
 
-  async function forcePush() {
+  async function executarPush() {
     setSyncingPush(true);
     try {
       await ti400Service.syncPush();
@@ -1236,6 +1419,16 @@ function GeralTab() {
     } catch (err: any) {
       Toast.show({ type: 'error', text1: 'Push falhou', text2: err.message });
     } finally { setSyncingPush(false); }
+  }
+
+  function forcePull() {
+    setConfirmacao({ titulo: 'Forçar Pull', mensagem: 'Importar agora os dados do ERP para a base local?',
+      confirmarTexto: 'Executar', onConfirmar: executarPull });
+  }
+
+  function forcePush() {
+    setConfirmacao({ titulo: 'Forçar Push', mensagem: 'Enviar agora sessões e pesagens locais para o ERP?',
+      confirmarTexto: 'Executar', onConfirmar: executarPush });
   }
 
   if (loading) return <CenterLoader />;
@@ -1324,8 +1517,9 @@ function GeralTab() {
       </Section>
 
       {/* Botão Salvar */}
-      <Pressable onPress={salvar} disabled={saving}
-        style={{ backgroundColor: saving ? '#9ca3af' : '#163029', borderRadius: 10,
+      <Pressable onPress={salvar} disabled={saving || !formAlterado || !formValido}
+        accessibilityState={{ disabled: saving || !formAlterado || !formValido, busy: saving }}
+        style={{ backgroundColor: (saving || !formAlterado || !formValido) ? '#9ca3af' : '#163029', borderRadius: 10,
           paddingVertical: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
         {saving
           ? <ActivityIndicator color="#d1ccbd" size="small" />
@@ -1377,6 +1571,7 @@ function GeralTab() {
           </View>
         )}
       </Section>
+      <ConfirmacaoModal confirmacao={confirmacao} onCancelar={() => setConfirmacao(null)} />
     </ScrollView>
   );
 }
@@ -1409,7 +1604,12 @@ function ModoSyncRow({ modo, onModo, horarios, onHorarios, intervalo, onInterval
         <View>
           <Text style={fLabel}>Horários (HH:mm separados por vírgula)</Text>
           <TextInput value={horarios} onChangeText={onHorarios}
-            placeholder="Ex: 07:00, 14:00" placeholderTextColor="#9ca3af" style={fInput} />
+            placeholder="Ex: 07:00, 14:00" placeholderTextColor="#9ca3af" style={fInput}
+            autoCapitalize="none" autoCorrect={false} keyboardType="numbers-and-punctuation"
+            accessibilityHint="Informe horários no formato de vinte e quatro horas, separados por vírgula" />
+          <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 11, color: '#6b7280', marginTop: 5 }}>
+            Formato 24 horas. Exemplos: 07:00 ou 07:00, 12:00, 19:00.
+          </Text>
         </View>
       ) : (
         <View>

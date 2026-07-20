@@ -49,6 +49,12 @@
       "expo-font",
       "expo-web-browser",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Permitir que o Exatto App use a câmera para escanear códigos QR de rastreabilidade."
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {

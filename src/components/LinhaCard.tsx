@@ -104,7 +104,7 @@ export default function LinhaCard({ linha, loadingId, onIniciar, onCancelar, onR
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <Feather name="user" size={13} color="#2F4B44" />
               <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 13, color: '#2F4B44' }}>
-                Col. #{sessao.idColaborador}
+                {sessao.dsColaborador || 'Colaborador'} · ID {sessao.idColaborador}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>

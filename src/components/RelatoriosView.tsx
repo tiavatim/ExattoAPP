@@ -14,6 +14,7 @@ import { Feather } from '@expo/vector-icons';
 import DropDownPicker from 'react-native-dropdown-picker';
 import Toast from 'react-native-toast-message';
 import { RastreabilidadeDetalheCard } from '@/components/RastreabilidadeView';
+import ResponsiveDataTable from '@/components/ResponsiveDataTable';
 import ti400Service from '@/services/ti400Service';
 import {
   CriarRelatorioRequest,
@@ -82,7 +83,6 @@ type DataPickerAlvo = 'inicio' | 'fim';
 
 const ITENS_POR_PAGINA_PADRAO = 10;
 const ITENS_POR_PAGINA_OPCOES = [10, 25, 50];
-const TABELA_RELATORIO_MIN_WIDTH = 980;
 
 interface TipoInfo {
   label: string;
@@ -135,6 +135,8 @@ export default function RelatoriosView({ onBack }: Props) {
 
   const [linhas, setLinhas]         = useState<LineSettings[]>([]);
   const [produtos, setProdutos]     = useState<ProdutoItem[]>([]);
+  const [loadingProdutos, setLoadingProdutos] = useState(true);
+  const [erroProdutos, setErroProdutos] = useState(false);
   const [linhaOpen, setLinhaOpen]   = useState(false);
   const [produtoOpen, setProdutoOpen] = useState(false);
   const [linhaId, setLinhaId]       = useState<string | null>(null);
@@ -156,9 +158,28 @@ export default function RelatoriosView({ onBack }: Props) {
     ti400Service.getLinhas()
       .then(setLinhas)
       .catch(() => {});
-    ti400Service.getProdutos()
-      .then(setProdutos)
-      .catch(() => {});
+    ti400Service.getFaixas()
+      .then(faixas => {
+        const lista = faixas
+          .filter(faixa => faixa.cdProduto && faixa.dsProduto)
+          .map(faixa => ({
+            idProduto: faixa.idProduto,
+            cdProduto: faixa.cdProduto!,
+            dsProduto: faixa.dsProduto!,
+            qtdPorCaixaOp: 0,
+          }))
+          .sort((a, b) => a.dsProduto.localeCompare(b.dsProduto, 'pt-BR'));
+        if (faixas.length > 0 && lista.length === 0)
+          throw new Error('A API precisa ser atualizada para retornar nome e código dos produtos configurados.');
+        setProdutos(lista);
+        setErroProdutos(false);
+      })
+      .catch((err: any) => {
+        setErroProdutos(true);
+        Toast.show({ type: 'error', text1: 'Produtos não carregados',
+          text2: err.response?.data?.error ?? err.message });
+      })
+      .finally(() => setLoadingProdutos(false));
   }, []);
 
   // Poll do job enquanto pendente/processando
@@ -375,8 +396,8 @@ export default function RelatoriosView({ onBack }: Props) {
     if (colaboradorFiltro) {
       const idColaborador = Number.parseInt(colaboradorFiltro, 10);
       lista = lista.filter(pesagem =>
-        pesagem.idOperador === idColaborador ||
-        String(pesagem.dsOperador ?? '').toLowerCase().includes(colaboradorFiltro.toLowerCase()),
+        pesagem.idColaboradorSessao === idColaborador ||
+        String(pesagem.dsColaboradorSessao ?? '').toLowerCase().includes(colaboradorFiltro.toLowerCase()),
       );
     }
 
@@ -493,7 +514,7 @@ export default function RelatoriosView({ onBack }: Props) {
               />
             </View>
 
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, zIndex: produtoOpen ? 2500 : 1, elevation: produtoOpen ? 12 : 1 }}>
               <Text style={fieldLabel}>Produto</Text>
               <DropDownPicker
                 open={produtoOpen}
@@ -501,17 +522,23 @@ export default function RelatoriosView({ onBack }: Props) {
                 onOpen={() => { setTipoOpen(false); setLinhaOpen(false); }}
                 value={produtoId}
                 setValue={setProdutoId}
-                items={[
+                items={erroProdutos ? [
+                  { label: 'Não foi possível carregar os produtos', value: null, disabled: true },
+                ] : [
                   { label: 'Todos os produtos', value: null },
-                  ...produtos.map(p => ({ label: `${p.cdProduto} - ${p.dsProduto}`, value: p.idProduto })),
+                  ...produtos.map(p => ({ label: `${p.dsProduto} · Código ${p.cdProduto}`, value: p.idProduto })),
                 ]}
-                placeholder="Todos os produtos"
+                disabled={loadingProdutos || erroProdutos}
+                placeholder={loadingProdutos ? 'Carregando produtos...' : 'Todos os produtos'}
                 style={comboStyle}
                 textStyle={comboTextStyle}
                 dropDownContainerStyle={comboDropStyle}
-                listMode="MODAL"
-                modalTitle="Produto"
-                modalProps={{ animationType: 'slide' }}
+                listMode="SCROLLVIEW"
+                dropDownDirection="BOTTOM"
+                zIndex={2500}
+                zIndexInverse={900}
+                searchable
+                searchPlaceholder="Buscar por nome ou código..."
                 closeAfterSelecting
               />
             </View>
@@ -710,13 +737,7 @@ function PesagensRelatorioTabela({ loading, pesagens, pesagensFiltradas, pagina,
   onDetalhe: (pesagem: PesagemItem) => void;
 }) {
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ flexGrow: 1 }}
-      style={{ borderWidth: 1, borderColor: '#b8b4a6', borderRadius: 8, overflow: 'hidden' }}
-    >
-      <View style={{ flex: 1, minWidth: TABELA_RELATORIO_MIN_WIDTH }}>
+    <ResponsiveDataTable minWidth={760}>
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8,
           backgroundColor: '#b8b4a4', borderBottomWidth: 1, borderColor: '#a8a49a' }}>
           <Text style={[thCell, { width: 72 }]}>OP</Text>
@@ -884,8 +905,7 @@ function PesagensRelatorioTabela({ loading, pesagens, pesagensFiltradas, pagina,
             }}
           />
         )}
-      </View>
-    </ScrollView>
+    </ResponsiveDataTable>
   );
 }
 

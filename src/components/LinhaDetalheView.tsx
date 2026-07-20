@@ -9,6 +9,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -16,6 +17,7 @@ import Toast from 'react-native-toast-message';
 import { FaixaModal } from '@/components/ConfiguracoesView';
 import ModalIniciarSessao from '@/components/ModalIniciarSessao';
 import { RastreabilidadeDetalheCard } from '@/components/RastreabilidadeView';
+import ResponsiveDataTable from '@/components/ResponsiveDataTable';
 import ti400Service from '@/services/ti400Service';
 import { useUser } from '@/contexts/UserContext';
 import {
@@ -37,9 +39,9 @@ import {
 type Tab = 'ativa' | 'consultar';
 type FiltroResultado = 'todos' | 'verde' | 'amarela' | 'fora';
 type DataPickerAlvo = 'inicial' | 'final';
+type PeriodoConsulta = 'hoje' | '7dias' | 'mes' | '3meses' | 'personalizado';
 
 const ITENS_POR_PAGINA_PADRAO = 10;
-const TABELA_CONSULTA_MIN_WIDTH = 980;
 const ITENS_POR_PAGINA_OPCOES = [10, 25, 50];
 const RESULTADO_FILTRO_OPCOES: { id: FiltroResultado; label: string }[] = [
   { id: 'todos', label: 'Todos' },
@@ -56,6 +58,7 @@ function formatBRDate(d: Date) { return `${pad(d.getDate())}/${pad(d.getMonth() 
 function hoje() { return formatBRDate(new Date()); }
 function diasAtras(n: number) { const d = new Date(); d.setDate(d.getDate() - n); return formatBRDate(d); }
 function inicioMes() { const d = new Date(); return `01/${pad(d.getMonth() + 1)}/${d.getFullYear()}`; }
+function mesesAtras(n: number) { const d = new Date(); d.setMonth(d.getMonth() - n); return formatBRDate(d); }
 function parseBR(s: string): Date | null {
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s.trim());
   if (!m) return null;
@@ -133,6 +136,8 @@ interface FaixaPendente {
 
 export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) {
   const { usuario, temAcesso } = useUser();
+  const { width: larguraTela } = useWindowDimensions();
+  const filtrosEmDuasLinhas = larguraTela < 1000;
   const podeAtribuirOperador = temAcesso('/balancas/sessao/atribuir-operador');
   const [tab, setTab] = useState<Tab>('ativa');
 
@@ -250,9 +255,11 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
   // ── Aba Consultar ─────────────────────────────────────────────────────────
   const [dataInicial, setDataInicial]         = useState(hoje());
   const [dataFinal, setDataFinal]             = useState(hoje());
+  const [periodoConsulta, setPeriodoConsulta] = useState<PeriodoConsulta>('hoje');
   const [datePickerAberto, setDatePickerAberto] = useState<DataPickerAlvo | null>(null);
   const [filtrosVisiveis, setFiltrosVisiveis] = useState(false);
   const [buscaConsulta, setBuscaConsulta]     = useState('');
+  const [buscaFocada, setBuscaFocada]         = useState(false);
   const [filtroResultado, setFiltroResultado] = useState<FiltroResultado>('todos');
   const [resultadoPickerAberto, setResultadoPickerAberto] = useState(false);
   const [resultadoPickerFrame, setResultadoPickerFrame] = useState({ x: 0, y: 0, width: 132, height: 0 });
@@ -333,25 +340,46 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
     setDataFinal(dataHoje);
     setBuscaConsulta('');
     setFiltroResultado('todos');
+    setPeriodoConsulta('hoje');
     setResultadoPickerAberto(false);
     setFiltrosVisiveis(false);
     executarBusca(true, { dataInicial: dataHoje, dataFinal: dataHoje });
+  }
+
+  function aplicarPeriodo(periodo: PeriodoConsulta, dataDe?: string, dataAte = hoje()) {
+    setPeriodoConsulta(periodo);
+    if (periodo === 'personalizado') return;
+    if (!dataDe) return;
+    setDataInicial(dataDe);
+    setDataFinal(dataAte);
+    executarBusca(true, { dataInicial: dataDe, dataFinal: dataAte });
   }
 
   function selecionarDataFiltro(alvo: DataPickerAlvo, data: string) {
     const dataEscolhida = parseBR(data);
     const inicioAtual = parseBR(dataInicial);
     const fimAtual = parseBR(dataFinal);
+    let proximaInicial = dataInicial;
+    let proximaFinal = dataFinal;
 
     if (alvo === 'inicial') {
       setDataInicial(data);
-      if (dataEscolhida && fimAtual && dataEscolhida > fimAtual) setDataFinal(data);
+      proximaInicial = data;
+      if (dataEscolhida && fimAtual && dataEscolhida > fimAtual) {
+        setDataFinal(data);
+        proximaFinal = data;
+      }
     } else {
       setDataFinal(data);
-      if (dataEscolhida && inicioAtual && dataEscolhida < inicioAtual) setDataInicial(data);
+      proximaFinal = data;
+      if (dataEscolhida && inicioAtual && dataEscolhida < inicioAtual) {
+        setDataInicial(data);
+        proximaInicial = data;
+      }
     }
 
     setDatePickerAberto(null);
+    executarBusca(true, { dataInicial: proximaInicial, dataFinal: proximaFinal });
   }
 
   function alternarResultadoPicker() {
@@ -501,7 +529,7 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
                       </View>
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }}>
                         <InfoItem icon="tag"   valor={`OP ${sessaoAtiva.lote}`} />
-                        <InfoItem icon="user"  valor={`#${sessaoAtiva.idColaborador}`} />
+                        <InfoItem icon="user" valor={`${sessaoAtiva.dsColaborador || 'Colaborador'} · ID ${sessaoAtiva.idColaborador}`} />
                         <InfoItem icon="clock" valor={formatHora(sessaoAtiva.iniciada)} />
                       </View>
                       {sessaoAtiva.ultimoErro && (
@@ -590,15 +618,23 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
               paddingHorizontal: 14, paddingTop: 10, paddingBottom: 6, gap: 6 }}
           >
             {filtrosVisiveis && (
-              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start', zIndex: 20 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={fLabel}>Busca</Text>
+              <View style={{ flexDirection: 'row', flexWrap: filtrosEmDuasLinhas ? 'wrap' : 'nowrap',
+                columnGap: 14, rowGap: 10, alignItems: 'flex-start', zIndex: 20, width: '100%' }}>
+                <View style={filtrosEmDuasLinhas
+                  ? { flex: 1, minWidth: 220 }
+                  : { flex: 1.35, minWidth: 240 }}>
+                  <Text style={[fLabel, { fontFamily: 'Sina-Nova-Bold', fontSize: 12, color: '#163029' }]}>Busca</Text>
                   <TextInput value={buscaConsulta} onChangeText={setBuscaConsulta}
-                    placeholder="Lote, produto ou rastreabilidade" placeholderTextColor="#9ca3af"
-                    autoCapitalize="none" autoCorrect={false} style={fInput} />
+                    placeholder="Lote, produto ou rastreabilidade" placeholderTextColor="#718078"
+                    autoCapitalize="none" autoCorrect={false}
+                    onFocus={() => setBuscaFocada(true)} onBlur={() => setBuscaFocada(false)}
+                    style={[fInput, { backgroundColor: '#fffdf7', borderWidth: buscaFocada ? 2 : 1,
+                      borderColor: buscaFocada ? '#163029' : '#778982', paddingVertical: buscaFocada ? 7 : 8 }]} />
                 </View>
 
-                <View ref={resultadoPickerRef} style={{ width: 132, zIndex: 30 }}>
+                <View ref={resultadoPickerRef} style={filtrosEmDuasLinhas
+                  ? { width: 155, zIndex: 30 }
+                  : { flex: 0.65, minWidth: 140, zIndex: 30 }}>
                   <Text style={fLabel}>Resultado</Text>
                   <Pressable onPress={alternarResultadoPicker}
                     style={{ ...fInput as any, paddingVertical: 9, flexDirection: 'row',
@@ -610,32 +646,51 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
                   </Pressable>
                 </View>
 
-                <View style={{ flex: 1.35 }}>
+                <View style={filtrosEmDuasLinhas
+                  ? { width: '100%', minWidth: 0 }
+                  : { flex: 2.5, minWidth: 0 }}>
                   <Text style={fLabel}>Período</Text>
-                  <View style={{ flexDirection: 'row', gap: 6 }}>
-                    <Pressable onPress={() => setDatePickerAberto('inicial')}
-                      style={{ flex: 1, minHeight: 40, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 6,
-                        borderWidth: 1, borderColor: '#b8b4a6', backgroundColor: '#d1ccbd',
-                        alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 10, color: '#163029' }} numberOfLines={1}>
-                        Data inicial
-                      </Text>
-                      <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 10, color: '#2F4B44' }} numberOfLines={1}>
-                        {dataInicial}
-                      </Text>
-                    </Pressable>
-                    <Pressable onPress={() => setDatePickerAberto('final')}
-                      style={{ flex: 1, minHeight: 40, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 6,
-                        borderWidth: 1, borderColor: '#b8b4a6', backgroundColor: '#d1ccbd',
-                        alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 10, color: '#163029' }} numberOfLines={1}>
-                        Data final
-                      </Text>
-                      <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 10, color: '#2F4B44' }} numberOfLines={1}>
-                        {dataFinal}
-                      </Text>
-                    </Pressable>
-                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                    style={{ width: '100%' }}
+                    contentContainerStyle={{ flexGrow: 1, flexDirection: 'row', gap: 8,
+                      alignItems: 'center', paddingRight: 2 }}>
+                    {[
+                      { id: 'hoje' as const, label: 'Hoje', inicio: hoje() },
+                      { id: '7dias' as const, label: '7 dias', inicio: diasAtras(6) },
+                      { id: 'mes' as const, label: 'Este mês', inicio: inicioMes() },
+                      { id: '3meses' as const, label: '3 meses', inicio: mesesAtras(3) },
+                      { id: 'personalizado' as const, label: 'Personalizado' },
+                    ].map(periodo => {
+                      const ativo = periodoConsulta === periodo.id;
+                      return (
+                        <Pressable key={periodo.id} onPress={() => aplicarPeriodo(periodo.id, periodo.inicio)}
+                          accessibilityRole="button" accessibilityState={{ selected: ativo }}
+                          style={{ minHeight: 42, paddingHorizontal: 13, borderRadius: 8,
+                            justifyContent: 'center', borderWidth: 1,
+                            borderColor: ativo ? '#163029' : '#b8b4a6',
+                            backgroundColor: ativo ? '#163029' : '#d1ccbd' }}>
+                          <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 11,
+                            color: ativo ? '#d1ccbd' : '#163029' }}>{periodo.label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                    {periodoConsulta === 'personalizado' && ([
+                      { alvo: 'inicial' as const, label: 'Data inicial', valor: dataInicial },
+                      { alvo: 'final' as const, label: 'Data final', valor: dataFinal },
+                    ]).map(campo => (
+                      <Pressable key={campo.alvo} onPress={() => setDatePickerAberto(campo.alvo)}
+                        style={{ width: 150, minHeight: 42, borderRadius: 8,
+                          paddingVertical: 5, paddingHorizontal: 12, borderWidth: 1,
+                          borderColor: '#163029', backgroundColor: '#e8e3d8', justifyContent: 'center' }}>
+                        <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 10, color: '#6b7280', marginBottom: 1 }}>
+                          {campo.label}
+                        </Text>
+                        <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 12, color: '#163029' }}>
+                          {campo.valor}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
                 </View>
               </View>
             )}
@@ -654,17 +709,6 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
                   {filtrosVisiveis ? 'Remover filtros' : 'Filtros'}
                 </Text>
               </Pressable>
-              <Pressable onPress={() => executarBusca(true)} disabled={loadingConsulta}
-                style={{ flex: 1, backgroundColor: loadingConsulta ? '#9ca3af' : '#163029',
-                  paddingVertical: 11, borderRadius: 8,
-                  flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
-                {loadingConsulta
-                  ? <ActivityIndicator color="#d1ccbd" size="small" />
-                  : <Feather name="search" size={16} color="#d1ccbd" />}
-                <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 14, color: '#d1ccbd' }}>
-                  {loadingConsulta ? 'Buscando...' : 'Buscar'}
-                </Text>
-              </Pressable>
               <Pressable onPress={exportar} disabled={exportando || loadingConsulta}
                 style={{ flex: 1, backgroundColor: (exportando || loadingConsulta) ? '#9ca3af' : '#2F4B44',
                   paddingVertical: 11, borderRadius: 8,
@@ -681,13 +725,7 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
             {exportJob && <ExportStatus job={exportJob} onDismiss={() => setExportJob(null)} />}
           </View>
 
-          <ScrollView
-            horizontal
-            style={{ flex: 1 }}
-            contentContainerStyle={{ flexGrow: 1 }}
-            showsHorizontalScrollIndicator={false}
-          >
-            <View style={{ flex: 1, minWidth: TABELA_CONSULTA_MIN_WIDTH }}>
+          <ResponsiveDataTable minWidth={760} fill>
               {/* Header da tabela */}
               <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8,
                 backgroundColor: '#b8b4a4', borderBottomWidth: 1, borderColor: '#a8a49a' }}>
@@ -856,8 +894,7 @@ export default function LinhaDetalheView({ linhaId, linhaNome, onBack }: Props) 
               }}
             />
           )}
-            </View>
-          </ScrollView>
+          </ResponsiveDataTable>
         </View>
       )}
 
@@ -1242,6 +1279,9 @@ function PesagemRowAtiva({ item }: { item: PesagemItem }) {
         </Text>
         <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 12, color: '#6b7280' }}>
           {formatHora(item.dtPesagem)}
+        </Text>
+        <Text style={{ fontFamily: 'Sina-Nova-Regular', fontSize: 11, color: '#6b7280' }} numberOfLines={1}>
+          APP: {item.dsColaboradorSessao || `ID ${item.idColaboradorSessao}`} · Terminal: {item.dsOperador || (item.idOperador != null ? `ID ${item.idOperador}` : 'N/A')}
         </Text>
       </View>
       <Text style={{ fontFamily: 'Sina-Nova-Bold', fontSize: 14, color: '#163029', marginRight: 10 }}>
